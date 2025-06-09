@@ -1,15 +1,4 @@
 services:
   - type: web
     name: montblanc
-    env: go
-    buildCommand: go build -o app ./cmd/check/main.go
-    startCommand: ./app
-    envVars:
-      - key: MONTBLANC_BOT_TOKEN
-        sync: false
-      - key: MONTBLANC_CHAT_IDS
-        sync: false
-      - key: PHPSESSID
-        sync: false
-    envGroups:
-      - production 
+    env: go 
