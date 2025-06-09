@@ -5,6 +5,7 @@
 *.so
 *.dylib
 check-booking
+montblanc
 
 # Test binary, built with `go test -c`
 *.test
