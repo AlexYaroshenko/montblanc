@@ -1,4 +1,10 @@
 services:
   - type: web
     name: montblanc
-    env: go 
+    env: go
+    plan: free
+    buildCommand: go build -o montblanc cmd/check/main.go
+    startCommand: ./montblanc -date 2024-08-01
+    envVars:
+      - key: PORT
+        value: 8080 

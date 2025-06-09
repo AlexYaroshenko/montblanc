@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,6 +35,15 @@ type TelegramMessage struct {
 	Text      string `json:"text"`
 	ParseMode string `json:"parse_mode"`
 }
+
+type Status struct {
+	LastCheck    time.Time
+	Refuges      []Refuge
+	CurrentMonth time.Time
+	mu           sync.RWMutex
+}
+
+var currentStatus = &Status{}
 
 func sendTelegramMessage(botToken string, chatIDs []string, message string) error {
 	for _, chatID := range chatIDs {
@@ -214,11 +225,142 @@ func formatConsoleOutput(refuges []Refuge, month time.Time) string {
 	return msg.String()
 }
 
+func startWebServer(port string) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		currentStatus.mu.RLock()
+		defer currentStatus.mu.RUnlock()
+
+		tmpl := `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mont Blanc Refuge Availability</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .status {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .date-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .date-header {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .refuge-status {
+            margin-left: 20px;
+        }
+        .available {
+            color: #27ae60;
+        }
+        .full {
+            color: #e74c3c;
+        }
+        .not-available {
+            color: #95a5a6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mont Blanc Refuge Availability</h1>
+        <div class="status">
+            Last check: {{.LastCheck.Format "2006-01-02 15:04:05"}}
+        </div>
+        {{range $date, $refuges := .Availability}}
+        <div class="date-section">
+            <div class="date-header">📅 {{$date}}</div>
+            {{range $refuges}}
+            <div class="refuge-status">
+                {{.Name}}: {{.Status}}
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>`
+
+		t, err := template.New("status").Parse(tmpl)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Prepare data for template
+		type RefugeStatus struct {
+			Name   string
+			Status string
+		}
+
+		type TemplateData struct {
+			LastCheck    time.Time
+			Availability map[string][]RefugeStatus
+		}
+
+		data := TemplateData{
+			LastCheck:    currentStatus.LastCheck,
+			Availability: make(map[string][]RefugeStatus),
+		}
+
+		// Group refuges by date
+		for _, refuge := range currentStatus.Refuges {
+			for date, status := range refuge.Dates {
+				data.Availability[date] = append(data.Availability[date], RefugeStatus{
+					Name:   refuge.Name,
+					Status: status,
+				})
+			}
+		}
+
+		if err := t.Execute(w, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	go func() {
+		fmt.Printf("Starting web server on port %s...\n", port)
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			fmt.Printf("Error starting web server: %v\n", err)
+		}
+	}()
+}
+
 func main() {
 	// Get configuration from environment variables
 	telegramToken := os.Getenv(envBotToken)
 	telegramChatIDs := os.Getenv(envChatIDs)
 	phpsessid := os.Getenv("PHPSESSID")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	if telegramToken == "" || telegramChatIDs == "" {
 		fmt.Printf("Error: %s and %s environment variables must be set\n", envBotToken, envChatIDs)
@@ -296,6 +438,9 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Start web server
+	startWebServer(port)
+
 	// Send startup notification
 	startupMsg := fmt.Sprintf("🚀 Starting monitoring for %s\nChecking refuges: %s\nCheck frequency: every %d minute(s)",
 		firstDayOfMonth.Format("January 2006"),
@@ -345,6 +490,13 @@ func main() {
 						continue
 					}
 				}
+
+				// Update current status
+				currentStatus.mu.Lock()
+				currentStatus.LastCheck = time.Now()
+				currentStatus.Refuges = refuges
+				currentStatus.CurrentMonth = firstDayOfMonth
+				currentStatus.mu.Unlock()
 
 				// Check for changes
 				hasChanges := false
