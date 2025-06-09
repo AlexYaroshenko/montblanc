@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -22,7 +23,16 @@ func StartServer() {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/status", handleStatus)
 
-	port := "8080"
+	// Initialize LastCheck time
+	state.mu.Lock()
+	state.LastCheck = time.Now()
+	state.mu.Unlock()
+
+	// Get port from environment variable or use default
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	log.Printf("Starting web server on port %s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("Failed to start web server: %v", err)
@@ -33,7 +43,12 @@ func UpdateState(refuges []parser.Refuge, lastCheck time.Time) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	state.Refuges = refuges
-	state.LastCheck = lastCheck
+	if !lastCheck.IsZero() {
+		state.LastCheck = lastCheck
+		log.Printf("Updated web state - Last check: %v, Refuges: %d", state.LastCheck, len(state.Refuges))
+	} else {
+		log.Printf("Warning: Attempted to update web state with zero time")
+	}
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {

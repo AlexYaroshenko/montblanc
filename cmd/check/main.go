@@ -84,6 +84,7 @@ func main() {
 				continue
 			}
 
+			// Update web interface with current time
 			web.UpdateState(refuges, time.Now())
 
 			// Check for new available dates
