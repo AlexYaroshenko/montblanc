@@ -10,4 +10,6 @@ services:
       - key: MONTBLANC_CHAT_IDS
         sync: false
       - key: PHPSESSID
-        sync: false 
+        sync: false
+    envGroups:
+      - production 
