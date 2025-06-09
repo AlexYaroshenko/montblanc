@@ -215,6 +215,21 @@ func formatConsoleOutput(refuges []Refuge, month time.Time) string {
 }
 
 func main() {
+	// Get configuration from environment variables
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	phpsessid := os.Getenv("PHPSESSID")
+
+	if telegramToken == "" || telegramChatID == "" {
+		fmt.Println("Error: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables must be set")
+		os.Exit(1)
+	}
+
+	if phpsessid == "" {
+		fmt.Println("Error: PHPSESSID environment variable must be set")
+		os.Exit(1)
+	}
+
 	date := flag.String("date", "", "Booking date in YYYY-MM-DD format (will check the entire month)")
 	pax := flag.String("pax", "1", "Number of people")
 	botToken := flag.String("bot-token", os.Getenv(envBotToken), "Telegram bot token (can be set via MONTBLANC_BOT_TOKEN env var)")
