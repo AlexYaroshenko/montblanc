@@ -3,7 +3,7 @@ services:
     name: montblanc
     env: go
     buildCommand: go build -o app ./cmd/check/main.go
-    startCommand: ./app -date 2025-07-01
+    startCommand: ./app
     envVars:
       - key: MONTBLANC_BOT_TOKEN
         sync: false

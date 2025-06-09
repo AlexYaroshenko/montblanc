@@ -230,7 +230,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	date := flag.String("date", "", "Booking date in YYYY-MM-DD format (will check the entire month)")
+	// Set default date to next month if not provided
+	defaultDate := time.Now().AddDate(0, 1, 0).Format("2006-01-02")
+	date := flag.String("date", defaultDate, "Booking date in YYYY-MM-DD format (will check the entire month)")
 	pax := flag.String("pax", "1", "Number of people")
 	botToken := flag.String("bot-token", os.Getenv(envBotToken), "Telegram bot token (can be set via MONTBLANC_BOT_TOKEN env var)")
 	chatIDs := flag.String("chat-ids", os.Getenv(envChatIDs), "Comma-separated list of Telegram chat IDs (can be set via MONTBLANC_CHAT_IDS env var)")
