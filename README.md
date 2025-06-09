@@ -55,8 +55,8 @@ Parameters:
 - `-frequency`: Optional. Check frequency in minutes (default: 1)
 
 Environment variables:
-- `MONTBLANC_BOT_TOKEN`: Telegram bot token
-- `MONTBLANC_CHAT_IDS`: Comma-separated list of Telegram chat IDs
+- `TELEGRAM_BOT_TOKEN`: Telegram bot token
+- `TELEGRAM_CHAT_IDS`: Comma-separated list of Telegram chat IDs
 
 ## Setting up Telegram Notifications
 
@@ -80,8 +80,8 @@ Environment variables:
 
 4. Set up environment variables:
 ```bash
-export MONTBLANC_BOT_TOKEN="your_bot_token"
-export MONTBLANC_CHAT_IDS="your_chat_id,another_chat_id"
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export TELEGRAM_CHAT_IDS="your_chat_id,another_chat_id"
 ```
 
 ## Notes
