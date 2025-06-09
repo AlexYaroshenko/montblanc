@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -158,5 +159,5 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	defer state.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "ok", "refuges": ` + string(len(state.Refuges)) + `, "last_check": "` + state.LastCheck.Format(time.RFC3339) + `"}`))
+	w.Write([]byte(`{"status": "ok", "refuges": ` + strconv.Itoa(len(state.Refuges)) + `, "last_check": "` + state.LastCheck.Format(time.RFC3339) + `"}`))
 }
