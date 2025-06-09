@@ -216,12 +216,12 @@ func formatConsoleOutput(refuges []Refuge, month time.Time) string {
 
 func main() {
 	// Get configuration from environment variables
-	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	telegramToken := os.Getenv(envBotToken)
+	telegramChatIDs := os.Getenv(envChatIDs)
 	phpsessid := os.Getenv("PHPSESSID")
 
-	if telegramToken == "" || telegramChatID == "" {
-		fmt.Println("Error: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables must be set")
+	if telegramToken == "" || telegramChatIDs == "" {
+		fmt.Printf("Error: %s and %s environment variables must be set\n", envBotToken, envChatIDs)
 		os.Exit(1)
 	}
 
