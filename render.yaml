@@ -2,8 +2,11 @@ services:
   - type: web
     name: montblanc
     env: go
-    rootDir: .
-    buildCommand: cd /opt/render/project/src && go build -o app cmd/check/main.go
+    buildCommand: |
+      mkdir -p /opt/render/project/src/github.com/AlexYaroshenko/montblanc
+      cp -r . /opt/render/project/src/github.com/AlexYaroshenko/montblanc/
+      cd /opt/render/project/src/github.com/AlexYaroshenko/montblanc
+      go build -o app cmd/check/main.go
     startCommand: ./app
     envVars:
       - key: MONTBLANC_BOT_TOKEN
