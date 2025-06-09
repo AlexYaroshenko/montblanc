@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: '1.24'
 
@@ -23,9 +23,5 @@ jobs:
       - name: Build
         run: go build -o check-booking cmd/check/main.go
 
-      - name: Deploy to Render
-        uses: render-actions/deploy@v1
-        with:
-          apiKey: ${{ secrets.RENDER_API_KEY }}
-          serviceId: ${{ secrets.RENDER_SERVICE_ID }}
-          environment: production 
+      # The deployment will be handled automatically by Render
+      # when changes are pushed to the main branch 
