@@ -69,6 +69,8 @@ func main() {
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
 
+	log.Printf("Starting main loop with check interval: %v", checkInterval)
+
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -77,7 +79,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			log.Printf("Checking availability...")
+			log.Printf("Ticker triggered - Checking availability at %v...", time.Now().Format("2006-01-02 15:04:05"))
 			refuges, err := parser.ParseRefugeAvailability(refugeURL, targetDate)
 			if err != nil {
 				log.Printf("Warning: Failed to check availability: %v", err)
@@ -104,6 +106,8 @@ func main() {
 				if err := telegram.SendMessage(notification); err != nil {
 					log.Printf("Warning: Failed to send notification: %v", err)
 				}
+			} else {
+				log.Printf("No new availability found at %v", time.Now().Format("2006-01-02 15:04:05"))
 			}
 
 		case <-sigChan:

@@ -87,7 +87,7 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 
 		// Parse the HTML content
 		content := string(body)
-		log.Printf("Received %s response of length %d bytes", refugeName, len(content))
+		log.Printf("Received %s response of length %d bytes at %v", refugeName, len(content), time.Now().Format("2006-01-02 15:04:05"))
 
 		// Create refuge
 		refuge := Refuge{
@@ -115,9 +115,9 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 			}
 		}
 		if len(availableDates) > 0 {
-			log.Printf("📅 %s available dates: %s", refugeName, strings.Join(availableDates, ", "))
+			log.Printf("📅 %s available dates at %v: %s", refugeName, time.Now().Format("2006-01-02 15:04:05"), strings.Join(availableDates, ", "))
 		} else {
-			log.Printf("❌ %s has no available dates", refugeName)
+			log.Printf("❌ %s has no available dates at %v", refugeName, time.Now().Format("2006-01-02 15:04:05"))
 		}
 
 		totalDates += len(refuge.Dates)
