@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -141,18 +142,32 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 		return fmt.Errorf("failed to parse HTML: %v", err)
 	}
 
+	// if content contains "Your Rank in the waiting room"
+	// try again in 1 minute
+	if strings.Contains(content, "Your Rank in the waiting room") {
+		log.Printf("Your Rank in the waiting room, retrying in 1 minute")
+		time.Sleep(1 * time.Minute)
+		return parseRefugeContent(content, refuge)
+	}
+
 	// Find all available dates
 	doc.Find(".day.dispo").Each(func(i int, s *goquery.Selection) {
-		date := s.Clone().Children().Remove().End().Text()
-		places := s.Find("span").First().Text()
-		if date != "" && places != "" {
-			parts := strings.Split(date, "/")
-			if len(parts) == 2 {
-				month := parts[0]
-				day := parts[1]
-				formattedDate := fmt.Sprintf("2025-%02s-%02s", month, day)
-				refuge.Dates[formattedDate] = places
-				log.Printf("🎉 %s - Date %s: %s places available", refuge.Name, formattedDate, places)
+		dateSpan := s.Find("span.date").First()
+		placeSpan := s.Find("span.place").First()
+
+		if dateSpan.Length() > 0 && placeSpan.Length() > 0 {
+			date := strings.TrimSpace(dateSpan.Text())
+			places := strings.TrimSpace(placeSpan.Text())
+
+			if date != "" && places != "" {
+				parts := strings.Split(date, "/")
+				if len(parts) == 2 {
+					month := parts[0]
+					day := parts[1]
+					formattedDate := fmt.Sprintf("2025-%02s-%02s", month, day)
+					refuge.Dates[formattedDate] = places
+					log.Printf("🎉 %s - Date %s: %s places available", refuge.Name, formattedDate, places)
+				}
 			}
 		}
 	})
@@ -176,22 +191,29 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 }
 
 func CheckAvailability(refuges []Refuge, targetDate time.Time) (bool, string) {
-	dateStr := targetDate.Format("2006-01-02")
-	log.Printf("Checking availability for date: %s", dateStr)
+	log.Printf("Checking availability across all dates")
 
-	var availableRefuges []string
+	var availableDates []string
+	totalPlaces := 0
+
 	for _, refuge := range refuges {
-		if status, exists := refuge.Dates[dateStr]; exists {
-			log.Printf("Refuge %s: %s", refuge.Name, status)
+		for date, status := range refuge.Dates {
 			if status != "Full" {
-				availableRefuges = append(availableRefuges, fmt.Sprintf("%s has %s places", refuge.Name, status))
+				// Convert places string to integer
+				places, err := strconv.Atoi(status)
+				if err != nil {
+					log.Printf("Warning: Failed to parse places for %s on %s: %v", refuge.Name, date, err)
+					continue
+				}
+				totalPlaces += places
+				availableDates = append(availableDates, fmt.Sprintf("%s on %s has %d places", refuge.Name, date, places))
 			}
 		}
 	}
 
-	if len(availableRefuges) > 0 {
-		return true, strings.Join(availableRefuges, ", ")
+	if len(availableDates) > 0 {
+		return true, fmt.Sprintf("Total %d places available across all dates: %s", totalPlaces, strings.Join(availableDates, ", "))
 	}
 
-	return false, "No availability found for the target date"
+	return false, "No availability found for any date"
 }

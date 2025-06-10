@@ -1,8 +1,36 @@
 package parser
 
 import (
+	"os"
 	"testing"
 )
+
+func TestParseRefugeContentFromFile(t *testing.T) {
+	content, err := os.ReadFile("response.html")
+	if err != nil {
+		t.Fatalf("failed to read response.html: %v", err)
+	}
+
+	refuge := Refuge{
+		Name:  "Test Refuge",
+		Dates: make(map[string]string),
+	}
+	err = parseRefugeContent(string(content), &refuge)
+	if err != nil {
+		t.Fatalf("failed to parse response.html: %v", err)
+	}
+
+	// Check if the dates are parsed correctly
+	if len(refuge.Dates) != 62 {
+		t.Errorf("expected 62 dates, got %d", len(refuge.Dates))
+	}
+	if refuge.Dates["2025-08-03"] != "2" {
+		t.Errorf("expected 2 places for 2025-08-03, got %s", refuge.Dates["2025-08-03"])
+	}
+	if refuge.Dates["2025-08-25"] != "1" {
+		t.Errorf("expected 1 places for 2025-08-08, got %s", refuge.Dates["2025-08-25"])
+	}
+}
 
 func TestParseRefugeContent(t *testing.T) {
 	tests := []struct {
@@ -15,8 +43,18 @@ func TestParseRefugeContent(t *testing.T) {
 		{
 			name: "successful parse with available and full dates",
 			html: `
-				<div class="day dispo">08/03<span>2</span></div>
-				<div class="day dispo">08/08<span>1</span></div>
+				<div class="day dispo">
+					<a href="#" data-date="2025-08-03" id="date20250803" onclick="return false;">
+						<span class="date">08/03</span>
+						<span class="place">2</span>
+					</a>
+				</div>
+				<div class="day dispo">
+					<a href="#" data-date="2025-08-08" id="date20250808" onclick="return false;">
+						<span class="date">08/08</span>
+						<span class="place">1</span>
+					</a>
+				</div>
 				<div class="day complet">08/10</div>
 			`,
 			refuge: Refuge{
@@ -42,8 +80,18 @@ func TestParseRefugeContent(t *testing.T) {
 		{
 			name: "only available dates",
 			html: `
-				<div class="day dispo">07/15<span>3</span></div>
-				<div class="day dispo">07/20<span>1</span></div>
+				<div class="day dispo">
+					<a href="#" data-date="2025-07-15" id="date20250715" onclick="return false;">
+						<span class="date">07/15</span>
+						<span class="place">3</span>
+					</a>
+				</div>
+				<div class="day dispo">
+					<a href="#" data-date="2025-07-20" id="date20250720" onclick="return false;">
+						<span class="date">07/20</span>
+						<span class="place">1</span>
+					</a>
+				</div>
 			`,
 			refuge: Refuge{
 				Name:  "Test Refuge",
