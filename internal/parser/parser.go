@@ -19,9 +19,8 @@ type Refuge struct {
 	Dates map[string]string // date -> status
 }
 
-func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, error) {
-	log.Printf("Fetching refuge availability from %s for date %s", baseURL, targetDate.Format("2006-01-02"))
-
+// makeAvailabilityRequest makes an API call to check refuge availability
+func makeAvailabilityRequest(refugeName string, structureID string, targetDate time.Time) (string, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
@@ -29,7 +28,7 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 	// Get session ID from environment
 	sessionID := os.Getenv("PHPSESSID")
 	if sessionID == "" {
-		return nil, fmt.Errorf("PHPSESSID environment variable is not set")
+		return "", fmt.Errorf("PHPSESSID environment variable is not set")
 	}
 
 	// Create form data for the booking system
@@ -40,6 +39,47 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 	formData.Set("productCategory", "nomatter")
 	formData.Set("pax", "1")
 	formData.Set("date", targetDate.Format("2006-01-02"))
+	formData.Set("structure", structureID)
+
+	// Create request for availability
+	apiURL := "https://centrale.ffcam.fr/index.php?_lang=GB"
+	
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(formData.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("error creating availability request: %v", err)
+	}
+
+	// Set essential headers
+	req.Header.Set("content-type", "application/x-www-form-urlencoded")
+
+	// Add session cookie
+	req.AddCookie(&http.Cookie{
+		Name:  "PHPSESSID",
+		Value: sessionID,
+	})
+
+	// Send request
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch %s page: %v", refugeName, err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code %d for %s", resp.StatusCode, refugeName)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read %s response body: %v", refugeName, err)
+	}
+
+	return string(body), nil
+}
+
+func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, error) {
+	log.Printf("Fetching refuge availability from %s for date %s", baseURL, targetDate.Format("2006-01-02"))
 
 	refuges := make([]Refuge, 0)
 	totalDates := 0
@@ -51,43 +91,12 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 	}
 
 	for refugeName, refugeID := range refugeIDs {
-		// Update structure ID for each refuge
-		formData.Set("structure", refugeID)
-
-		// Create request for availability
-		req, err := http.NewRequest("POST", "https://centrale.ffcam.fr/index.php?_lang=GB", strings.NewReader(formData.Encode()))
+		// Make API call
+		content, err := makeAvailabilityRequest(refugeName, refugeID, targetDate)
 		if err != nil {
-			return nil, fmt.Errorf("error creating availability request: %v", err)
+			return nil, err
 		}
 
-		// Set essential headers
-		req.Header.Set("content-type", "application/x-www-form-urlencoded")
-
-		// Add session cookie
-		req.AddCookie(&http.Cookie{
-			Name:  "PHPSESSID",
-			Value: sessionID,
-		})
-
-		// Send request
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch %s page: %v", refugeName, err)
-		}
-		defer resp.Body.Close()
-
-		// Check response status
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code %d for %s", resp.StatusCode, refugeName)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read %s response body: %v", refugeName, err)
-		}
-
-		// Parse the HTML content
-		content := string(body)
 		log.Printf("Received %s response of length %d bytes at %v", refugeName, len(content), time.Now().Format("2006-01-02 15:04:05"))
 
 		// Create refuge
@@ -143,18 +152,21 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 	}
 
 	// if content contains "Your Rank in the waiting room"
-	// try again in 1 minute
+	// try again in 1 minute with a new API call
 	if strings.Contains(content, "Your Rank in the waiting room") {
 		log.Printf("⏳ Your Rank in the waiting room, retrying in 1 minute...")
 		time.Sleep(1 * time.Minute)
 		log.Printf("🔄 Retrying after waiting room...")
-		err := parseRefugeContent(content, refuge)
+		
+		// Make a new API call
+		structureID := refuge.Name == "Tête Rousse" ? "BK_STRUCTURE:29" : "BK_STRUCTURE:30"
+		newContent, err := makeAvailabilityRequest(refuge.Name, structureID, time.Now())
 		if err != nil {
-			log.Printf("❌ Retry failed: %v", err)
-		} else {
-			log.Printf("✅ Retry successful")
+			return err
 		}
-		return err
+
+		// Parse the new HTML content
+		return parseRefugeContent(newContent, refuge)
 	}
 
 	// Find all available dates
