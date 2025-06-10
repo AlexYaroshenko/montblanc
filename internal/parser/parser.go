@@ -43,7 +43,7 @@ func makeAvailabilityRequest(refugeName string, structureID string, targetDate t
 
 	// Create request for availability
 	apiURL := "https://centrale.ffcam.fr/index.php?_lang=GB"
-	
+
 	req, err := http.NewRequest("POST", apiURL, strings.NewReader(formData.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("error creating availability request: %v", err)
@@ -157,9 +157,14 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 		log.Printf("⏳ Your Rank in the waiting room, retrying in 1 minute...")
 		time.Sleep(1 * time.Minute)
 		log.Printf("🔄 Retrying after waiting room...")
-		
+
 		// Make a new API call
-		structureID := refuge.Name == "Tête Rousse" ? "BK_STRUCTURE:29" : "BK_STRUCTURE:30"
+		var structureID string
+		if refuge.Name == "Tête Rousse" {
+			structureID = "BK_STRUCTURE:29"
+		} else {
+			structureID = "BK_STRUCTURE:30"
+		}
 		newContent, err := makeAvailabilityRequest(refuge.Name, structureID, time.Now())
 		if err != nil {
 			return err
