@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// Get subscriber names
-	subscriberNames := make([]string, 0)
+	var subscriberNames []string
 	if chatIDs := os.Getenv("TELEGRAM_CHAT_IDS"); chatIDs != "" {
 		for _, chatID := range telegram.ParseChatIDs(chatIDs) {
 			if name, err := telegram.GetUserInfo(chatID); err == nil {
@@ -57,8 +57,11 @@ func main() {
 		log.Printf("Warning: Failed to send start message: %v", err)
 	}
 
-	// Start web server
-	web.StartServer()
+	// Start web server in a goroutine
+	go func() {
+		log.Printf("🌐 Starting web server...")
+		web.StartServer()
+	}()
 
 	// Update web interface with initial results
 	if refuges != nil {
@@ -69,7 +72,7 @@ func main() {
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
 
-	log.Printf("Starting main loop with check interval: %v", checkInterval)
+	log.Printf("⏰ Starting main loop with check interval: %v", checkInterval)
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -77,17 +80,19 @@ func main() {
 
 	// Main loop
 	for {
+		log.Printf("⏳ Waiting for next tick...")
 		select {
 		case <-ticker.C:
-			log.Printf("Ticker triggered - Checking availability at %v...", time.Now().Format("2006-01-02 15:04:05"))
+			log.Printf("🔔 Ticker triggered at %v - Starting availability check...", time.Now().Format("2006-01-02 15:04:05"))
 			refuges, err := parser.ParseRefugeAvailability(refugeURL, targetDate)
 			if err != nil {
-				log.Printf("Warning: Failed to check availability: %v", err)
+				log.Printf("❌ Failed to check availability: %v", err)
 				continue
 			}
 
 			// Update web interface with current time
 			web.UpdateState(refuges, time.Now())
+			log.Printf("✅ Web interface updated at %v", time.Now().Format("2006-01-02 15:04:05"))
 
 			// Check for new available dates
 			var newDates []string
@@ -104,17 +109,20 @@ func main() {
 			if len(newDates) > 0 {
 				notification := fmt.Sprintf("🎉 New availability found!\n%s", strings.Join(newDates, "\n"))
 				if err := telegram.SendMessage(notification); err != nil {
-					log.Printf("Warning: Failed to send notification: %v", err)
+					log.Printf("❌ Failed to send notification: %v", err)
+				} else {
+					log.Printf("✅ Notification sent successfully")
 				}
 			} else {
-				log.Printf("No new availability found at %v", time.Now().Format("2006-01-02 15:04:05"))
+				log.Printf("ℹ️ No new availability found at %v", time.Now().Format("2006-01-02 15:04:05"))
 			}
+			log.Printf("✅ Check completed at %v", time.Now().Format("2006-01-02 15:04:05"))
 
 		case <-sigChan:
-			log.Println("Received shutdown signal, stopping...")
+			log.Println("🛑 Received shutdown signal, stopping...")
 			shutdownMsg := fmt.Sprintf("🛑 Monitoring stopped for %s", targetDate.Format("2006-01-02"))
 			if err := telegram.SendMessage(shutdownMsg); err != nil {
-				log.Printf("Warning: Failed to send shutdown message: %v", err)
+				log.Printf("❌ Failed to send shutdown message: %v", err)
 			}
 			return
 		}

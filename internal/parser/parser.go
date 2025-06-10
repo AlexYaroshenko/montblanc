@@ -145,9 +145,16 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 	// if content contains "Your Rank in the waiting room"
 	// try again in 1 minute
 	if strings.Contains(content, "Your Rank in the waiting room") {
-		log.Printf("Your Rank in the waiting room, retrying in 1 minute")
+		log.Printf("⏳ Your Rank in the waiting room, retrying in 1 minute...")
 		time.Sleep(1 * time.Minute)
-		return parseRefugeContent(content, refuge)
+		log.Printf("🔄 Retrying after waiting room...")
+		err := parseRefugeContent(content, refuge)
+		if err != nil {
+			log.Printf("❌ Retry failed: %v", err)
+		} else {
+			log.Printf("✅ Retry successful")
+		}
+		return err
 	}
 
 	// Find all available dates

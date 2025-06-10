@@ -1,12 +1,15 @@
 package web
 
 import (
+	"context"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/AlexYaroshenko/montblanc/internal/parser"
@@ -34,9 +37,30 @@ func StartServer() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Starting web server on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Failed to start web server: %v", err)
+
+	// Create server
+	server := &http.Server{
+		Addr: ":" + port,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Starting web server on port %s", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	// Attempt graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
 	}
 }
 
