@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -95,20 +96,68 @@ func main() {
 			log.Printf("✅ Web interface updated at %v", time.Now().Format("2006-01-02 15:04:05"))
 
 			// Check for new available dates
-			var newDates []string
+			type availability struct {
+				refuge string
+				date   string
+				status string
+			}
+			var newAvailabilities []availability
+
+			// Check if we got any dates at all
+			totalDates := 0
 			for _, refuge := range refuges {
+				totalDates += len(refuge.Dates)
 				for date, status := range refuge.Dates {
 					if status != "Full" && !notifiedDates[date] {
-						newDates = append(newDates, fmt.Sprintf("%s: %s places", date, status))
+						newAvailabilities = append(newAvailabilities, availability{
+							refuge: refuge.Name,
+							date:   date,
+							status: status,
+						})
 						notifiedDates[date] = true
 					}
 				}
 			}
 
-			// Send notification only if there are new dates
-			if len(newDates) > 0 {
-				notification := fmt.Sprintf("🎉 New availability found!\n%s", strings.Join(newDates, "\n"))
+			// Notify if no dates were parsed
+			if totalDates == 0 {
+				notification := "⚠️ Warning: No dates were parsed from the response. This might indicate an issue with the website or session."
 				if err := telegram.SendMessage(notification); err != nil {
+					log.Printf("❌ Failed to send warning notification: %v", err)
+				} else {
+					log.Printf("✅ Warning notification sent successfully")
+				}
+				continue
+			}
+
+			// Sort by date
+			sort.Slice(newAvailabilities, func(i, j int) bool {
+				return newAvailabilities[i].date < newAvailabilities[j].date
+			})
+
+			// Group by refuge
+			refugeGroups := make(map[string][]string)
+			for _, avail := range newAvailabilities {
+				refugeGroups[avail.refuge] = append(refugeGroups[avail.refuge],
+					fmt.Sprintf("%s: %s places", avail.date, avail.status))
+			}
+
+			// Format notification
+			if len(newAvailabilities) > 0 {
+				var notification strings.Builder
+				notification.WriteString("🎉 New availability found!\n\n")
+
+				for _, refuge := range []string{"Tête Rousse", "du Goûter"} {
+					if dates, exists := refugeGroups[refuge]; exists {
+						notification.WriteString(fmt.Sprintf("🏔️ %s:\n", refuge))
+						for _, date := range dates {
+							notification.WriteString(fmt.Sprintf("  • %s\n", date))
+						}
+						notification.WriteString("\n")
+					}
+				}
+
+				if err := telegram.SendMessage(notification.String()); err != nil {
 					log.Printf("❌ Failed to send notification: %v", err)
 				} else {
 					log.Printf("✅ Notification sent successfully")
