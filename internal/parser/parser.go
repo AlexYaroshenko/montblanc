@@ -143,10 +143,9 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 
 	// Find all available dates
 	doc.Find(".day.dispo").Each(func(i int, s *goquery.Selection) {
-		date := strings.TrimSpace(s.Text())
-		places := strings.TrimSpace(s.Find("span").First().Text())
+		date := s.Clone().Children().Remove().End().Text()
+		places := s.Find("span").First().Text()
 		if date != "" && places != "" {
-			// Convert MM/DD to YYYY-MM-DD
 			parts := strings.Split(date, "/")
 			if len(parts) == 2 {
 				month := parts[0]
