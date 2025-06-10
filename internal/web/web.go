@@ -26,6 +26,10 @@ var (
 func StartServer() {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/status", handleStatus)
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 
 	// Initialize LastCheck time
 	state.mu.Lock()
@@ -38,29 +42,36 @@ func StartServer() {
 		port = "8080"
 	}
 
-	// Create server
+	// Create server with timeouts
 	server := &http.Server{
-		Addr: ":" + port,
+		Addr:         ":" + port,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
 	}
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting web server on port %s", port)
+		log.Printf("🌐 Starting web server on port %s...", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Server error: %v", err)
+			log.Printf("❌ Server error: %v", err)
 		}
 	}()
 
-	// Wait for interrupt signal
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
+	// Start keep-alive goroutine
+	go keepAlive()
 
-	// Attempt graceful shutdown
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Attempt graceful shutdown
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		log.Printf("❌ Server forced to shutdown: %v", err)
 	}
 }
 
@@ -184,4 +195,29 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status": "ok", "refuges": ` + strconv.Itoa(len(state.Refuges)) + `, "last_check": "` + state.LastCheck.Format(time.RFC3339) + `"}`))
+}
+
+// keepAlive periodically pings the health check endpoint to keep the instance alive
+func keepAlive() {
+	// Hardcoded base URL for RENDER deployment
+	baseURL := "https://montblanc.onrender.com"
+	log.Printf("🌐 Keep-alive using base URL: %s", baseURL)
+
+	// Create ticker for periodic pings
+	ticker := time.NewTicker(14 * time.Minute) // Ping every 14 minutes to stay within free tier limits
+	defer ticker.Stop()
+
+	for range ticker.C {
+		resp, err := http.Get(baseURL + "/health")
+		if err != nil {
+			log.Printf("❌ Keep-alive ping failed: %v", err)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			log.Printf("✅ Keep-alive ping successful")
+		} else {
+			log.Printf("❌ Keep-alive ping returned status: %d", resp.StatusCode)
+		}
+	}
 }
