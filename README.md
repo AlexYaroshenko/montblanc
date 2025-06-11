@@ -11,6 +11,10 @@ A command-line tool to monitor availability for refuges on Mont Blanc route. The
 - Supports multiple Telegram chat subscribers
 - Shows availability status in the console
 - Handles session expiration gracefully
+- Automatically retries with new API calls when in waiting room
+- Groups availability notifications by refuge
+- Sorts availability dates chronologically
+- Notifies when no dates are found in the response
 
 ## Prerequisites
 
@@ -139,6 +143,9 @@ To deploy:
 - You can add multiple chat IDs to receive notifications
 - The program sends notifications for startup, shutdown, and errors
 - The web interface updates in real-time as new checks are performed
+- When encountering a waiting room, the program automatically retries with a new API call after 1 minute
+- Availability notifications are grouped by refuge and sorted by date
+- The program notifies you if no dates are found in the response
 
 ## License
 
