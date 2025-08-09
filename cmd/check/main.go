@@ -162,37 +162,74 @@ func main() {
 				continue
 			}
 
-			// Sort by date
-			sort.Slice(newAvailabilities, func(i, j int) bool {
-				return newAvailabilities[i].date < newAvailabilities[j].date
-			})
-
-			// Group by refuge
-			refugeGroups := make(map[string][]string)
-			for _, avail := range newAvailabilities {
-				refugeGroups[avail.refuge] = append(refugeGroups[avail.refuge],
-					fmt.Sprintf("%s: %s places", avail.date, avail.status))
-			}
-
-			// Format notification
+			// Per-subscriber filtered notifications based on saved queries
 			if len(newAvailabilities) > 0 {
-				var notification strings.Builder
-				notification.WriteString("🎉 New availability found!\n\n")
-
-				for _, refuge := range []string{"Tête Rousse", "du Goûter"} {
-					if dates, exists := refugeGroups[refuge]; exists {
-						notification.WriteString(fmt.Sprintf("🏔️ %s:\n", refuge))
-						for _, date := range dates {
-							notification.WriteString(fmt.Sprintf("  • %s\n", date))
-						}
-						notification.WriteString("\n")
-					}
-				}
-
-				if err := sendToSubscribersOrEnv(st, notification.String()); err != nil {
-					log.Printf("❌ Failed to send notification: %v", err)
+				subs, err := st.ListSubscribers()
+				if err != nil {
+					log.Printf("❌ Failed to list subscribers: %v", err)
 				} else {
-					log.Printf("✅ Notification sent successfully")
+					for _, sub := range subs {
+						qs, err := st.ListQueriesByChat(sub.ChatID)
+						if err != nil {
+							log.Printf("❌ Failed to list queries for %s: %v", sub.ChatID, err)
+							continue
+						}
+						if len(qs) == 0 {
+							continue
+						}
+
+						// Build matches for this subscriber
+						type line struct {
+							refuge string
+							date   string
+							status string
+						}
+						var lines []line
+						for _, avail := range newAvailabilities {
+							for _, q := range qs {
+								if queryMatches(avail.refuge, avail.date, q) {
+									lines = append(lines, line{refuge: avail.refuge, date: avail.date, status: avail.status})
+									// mark date as notified globally to avoid repeats
+									notifiedDates[avail.date] = true
+									break
+								}
+							}
+						}
+						if len(lines) == 0 {
+							continue
+						}
+
+						// Sort by date and group by refuge
+						sort.Slice(lines, func(i, j int) bool { return lines[i].date < lines[j].date })
+						groups := map[string][]string{}
+						for _, l := range lines {
+							groups[l.refuge] = append(groups[l.refuge], fmt.Sprintf("%s: %s places", l.date, l.status))
+						}
+
+						var b strings.Builder
+						b.WriteString("🎉 New availability found for your subscription!\n\n")
+						for _, r := range []string{"Tête Rousse", "du Goûter"} {
+							if dates, ok := groups[r]; ok {
+								b.WriteString(fmt.Sprintf("🏔️ %s:\n", r))
+								for _, d := range dates {
+									b.WriteString("  • " + d + "\n")
+								}
+								b.WriteString("\n")
+							}
+						}
+						// any other refuges
+						for r, dates := range groups {
+							if r == "Tête Rousse" || r == "du Goûter" {
+								continue
+							}
+							b.WriteString(fmt.Sprintf("🏔️ %s:\n", r))
+							for _, d := range dates {
+								b.WriteString("  • " + d + "\n")
+							}
+							b.WriteString("\n")
+						}
+						_ = telegram.SendMessageTo(sub.ChatID, b.String())
+					}
 				}
 			} else {
 				log.Printf("ℹ️ No new availability found at %v", time.Now().Format("2006-01-02 15:04:05"))
@@ -255,4 +292,34 @@ func sendToSubscribersOrEnv(st store.Store, msg string) error {
 		}
 	}
 	return telegram.SendMessage(msg)
+}
+
+// queryMatches checks if an availability line matches a saved query
+func queryMatches(refuge string, date string, q store.Query) bool {
+	if q.Refuge != "*" && q.Refuge != refuge {
+		return false
+	}
+	// date window
+	if q.DateFrom == "" && q.DateTo == "" {
+		return true
+	}
+	d, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return false
+	}
+	if q.DateFrom != "" {
+		if from, err := time.Parse("2006-01-02", q.DateFrom); err == nil {
+			if d.Before(from) {
+				return false
+			}
+		}
+	}
+	if q.DateTo != "" {
+		if to, err := time.Parse("2006-01-02", q.DateTo); err == nil {
+			if d.After(to) {
+				return false
+			}
+		}
+	}
+	return true
 }

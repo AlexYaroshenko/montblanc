@@ -124,28 +124,14 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	// Google Analytics
 	gaID := os.Getenv("GA_MEASUREMENT_ID")
 
-	// Build small table model for demo (earliest up to 3 dates across refuges)
-	datesSet := make(map[string]struct{})
-	for _, rf := range state.Refuges {
-		for d := range rf.Dates {
-			datesSet[d] = struct{}{}
-		}
-	}
-	allDates := make([]string, 0, len(datesSet))
-	for d := range datesSet {
-		allDates = append(allDates, d)
-	}
-	sort.Strings(allDates)
-	if len(allDates) > 3 {
-		allDates = allDates[:3]
-	}
-	tableHeaders := make([]string, len(allDates))
-	for i, d := range allDates {
-		if t, err := time.Parse("2006-01-02", d); err == nil {
-			tableHeaders[i] = t.Format("02 Jan")
-		} else {
-			tableHeaders[i] = d
-		}
+	// Build small table model for demo: show the next 7 days (a full week)
+	weekDates := make([]string, 7)
+	tableHeaders := make([]string, 7)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	for i := 0; i < 7; i++ {
+		d := today.AddDate(0, 0, i)
+		weekDates[i] = d.Format("2006-01-02")
+		tableHeaders[i] = d.Format("02 Jan")
 	}
 	type tableRow struct {
 		Name  string
@@ -153,16 +139,16 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]tableRow, 0, len(state.Refuges))
 	for _, rf := range state.Refuges {
-		cells := make([]string, len(allDates))
-		for i, d := range allDates {
+		cells := make([]string, len(weekDates))
+		for i, d := range weekDates {
 			if s, ok := rf.Dates[d]; ok {
 				if s == "Full" {
-					cells[i] = "—"
+					cells[i] = "Full"
 				} else {
 					cells[i] = s
 				}
 			} else {
-				cells[i] = ""
+				cells[i] = "—"
 			}
 		}
 		rows = append(rows, tableRow{Name: rf.Name, Cells: cells})
@@ -547,6 +533,8 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		dateFrom := now.Format("2006-01-02")
 		dateTo := now.AddDate(0, 0, 30).Format("2006-01-02")
 		_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: "*", DateFrom: dateFrom, DateTo: dateTo})
+		// Immediate check for this subscription
+		checkAndNotifySingle(chatID, "*", dateFrom, dateTo)
 		_ = telegram.SendMessageTo(chatID, fmt.Sprintf("✅ Subscribed for next 30 days (both refuges): %s → %s", dateFrom, dateTo))
 		notifyAdmins(fmt.Sprintf("✅ New default /start subscription: chat_id=%s @%s, lang=%s, refuge=*, from=%s, to=%s", chatID, sub.Username, lang2, dateFrom, dateTo))
 		w.WriteHeader(http.StatusOK)
@@ -621,6 +609,8 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = ps.UpsertSubscriber(sub)
 		_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
+		// Immediate check for this subscription
+		checkAndNotifySingle(chatID, refuge, dateFrom, dateTo)
 		_ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
 		notifyAdmins(fmt.Sprintf("✅ New subscription via deep link: chat_id=%s @%s, lang=%s, refuge=%s, from=%s, to=%s", chatID, uname, lang2, refuge, dateFrom, dateTo))
 		w.WriteHeader(http.StatusOK)
@@ -753,6 +743,76 @@ input.cmd{flex:1;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-fa
 </div>
 </div></body></html>`, deepLinkApp, deepLinkWeb, deepLinkWeb, command, botUsername)
 	_, _ = w.Write([]byte(page))
+}
+
+// checkAndNotifySingle filters current state by refuge/date window and sends a one-off notification to one chat
+func checkAndNotifySingle(chatID string, refuge string, dateFrom string, dateTo string) {
+	// Read snapshot
+	state.mu.RLock()
+	refuges := make([]parser.Refuge, len(state.Refuges))
+	copy(refuges, state.Refuges)
+	state.mu.RUnlock()
+
+	if len(refuges) == 0 {
+		return
+	}
+
+	// Parse window
+	fromT, err1 := time.Parse("2006-01-02", dateFrom)
+	toT, err2 := time.Parse("2006-01-02", dateTo)
+	if err1 != nil || err2 != nil {
+		return
+	}
+
+	matches := make(map[string][]string)
+	for _, rf := range refuges {
+		if refuge != "*" && rf.Name != refuge {
+			continue
+		}
+		for d, s := range rf.Dates {
+			if s == "Full" {
+				continue
+			}
+			dt, err := time.Parse("2006-01-02", d)
+			if err != nil {
+				continue
+			}
+			if (dt.Equal(fromT) || dt.After(fromT)) && (dt.Equal(toT) || dt.Before(toT)) {
+				matches[rf.Name] = append(matches[rf.Name], fmt.Sprintf("%s: %s places", d, s))
+			}
+		}
+	}
+	if len(matches) == 0 {
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString("🎯 Matching availability found:\n\n")
+	// order
+	order := []string{"Tête Rousse", "du Goûter"}
+	for _, name := range order {
+		if dates, ok := matches[name]; ok {
+			b.WriteString(fmt.Sprintf("🏔️ %s:\n", name))
+			sort.Strings(dates)
+			for _, line := range dates {
+				b.WriteString("  • " + line + "\n")
+			}
+			b.WriteString("\n")
+		}
+	}
+	// remaining
+	for name, dates := range matches {
+		if name == "Tête Rousse" || name == "du Goûter" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("🏔️ %s:\n", name))
+		sort.Strings(dates)
+		for _, line := range dates {
+			b.WriteString("  • " + line + "\n")
+		}
+		b.WriteString("\n")
+	}
+	_ = telegram.SendMessageTo(chatID, b.String())
 }
 
 // digitsOnly returns true if s contains only ASCII digits
