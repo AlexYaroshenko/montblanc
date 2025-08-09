@@ -207,7 +207,7 @@ func main() {
 
 		case <-sigChan:
 			log.Println("🛑 Received shutdown signal, stopping...")
-            shutdownMsg := "🛑 Monitoring stopped"
+			shutdownMsg := "🛑 Monitoring stopped"
 			if err := sendToSubscribersOrEnv(st, shutdownMsg); err != nil {
 				log.Printf("❌ Failed to send shutdown message: %v", err)
 			}
