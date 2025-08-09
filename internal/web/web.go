@@ -202,7 +202,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; }
         .lang { font-size: 14px; color: var(--muted); }
         .lang a { margin-left: 8px; }
-        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('https://images.unsplash.com/photo-1520697222863-c66ef0b8d1b3?q=80&w=1600&auto=format&fit=crop'); background-size: cover; background-position: center; color: white; text-align: center; }
+        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80'); background-size: cover; background-position: center; color: white; text-align: center; }
         .hero h1 { margin: 0 0 12px 0; font-size: 42px; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.45); }
         .hero p { margin: 0 auto 20px; max-width: 760px; color: #dfe7ff; }
         .cta { display: inline-flex; gap: 12px; }
@@ -263,7 +263,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         </div>
         <div class="hero-photos">
           <div class="photo">
-            <img src="https://images.unsplash.com/photo-1520697222863-c66ef0b8d1b3?auto=format&fit=crop&w=800&q=70" alt="Mont Blanc" loading="lazy" width="260" height="160" referrerpolicy="no-referrer"/>
+            <img src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=800&q=70" alt="Mont Blanc" loading="lazy" width="260" height="160" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/hero-montblanc.jpg'"/>
             <div class="caption">Mont Blanc</div>
           </div>
           <div class="photo">
