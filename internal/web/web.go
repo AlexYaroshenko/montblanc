@@ -293,7 +293,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             <table style="width:100%; border-collapse: collapse;">
               <thead>
                 <tr>
-                  <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Приют</th>
+                  <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">{{T "refuge"}}</th>
                   {{range .TableHeaders}}
                     <th style="text-align:center; padding:8px; border-bottom:1px solid #e5e7eb;">{{.}}</th>
                   {{end}}
