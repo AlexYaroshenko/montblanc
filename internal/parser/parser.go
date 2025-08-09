@@ -1,7 +1,7 @@
 package parser
 
 import (
-    "fmt"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -151,7 +151,6 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 	if err != nil {
 		return fmt.Errorf("failed to parse HTML: %v", err)
 	}
-
 
 	// if content contains "Your Rank in the waiting room"
 	// try again in 1 minute with a new API call
