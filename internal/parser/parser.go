@@ -105,8 +105,8 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 			Dates: make(map[string]string),
 		}
 
-		// Parse HTML content
-		if err := parseRefugeContent(content, &refuge); err != nil {
+        // Parse HTML content with targetDate as month/year anchor
+        if err := parseRefugeContent(content, &refuge, targetDate); err != nil {
 			log.Printf("Warning: Failed to parse HTML for %s: %v", refugeName, err)
 			continue
 		}
@@ -144,7 +144,8 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 }
 
 // parseRefugeContent parses HTML content and extracts available and full dates
-func parseRefugeContent(content string, refuge *Refuge) error {
+// anchor is used to determine the year (API returns MM/DD)
+func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error {
 	// Parse HTML using goquery
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
 	if err != nil {
@@ -165,13 +166,13 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 		} else {
 			structureID = "BK_STRUCTURE:30"
 		}
-		newContent, err := makeAvailabilityRequest(refuge.Name, structureID, time.Now())
+        newContent, err := makeAvailabilityRequest(refuge.Name, structureID, time.Now())
 		if err != nil {
 			return err
 		}
 
 		// Parse the new HTML content
-		return parseRefugeContent(newContent, refuge)
+        return parseRefugeContent(newContent, refuge, anchor)
 	}
 
 	// Find all available dates
@@ -179,7 +180,7 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 		dateSpan := s.Find("span.date").First()
 		placeSpan := s.Find("span.place").First()
 
-		if dateSpan.Length() > 0 && placeSpan.Length() > 0 {
+        if dateSpan.Length() > 0 && placeSpan.Length() > 0 {
 			date := strings.TrimSpace(dateSpan.Text())
 			places := strings.TrimSpace(placeSpan.Text())
 
@@ -188,7 +189,7 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 				if len(parts) == 2 {
 					month := parts[0]
 					day := parts[1]
-					formattedDate := fmt.Sprintf("2025-%02s-%02s", month, day)
+                    formattedDate := fmt.Sprintf("%04d-%02s-%02s", anchor.Year(), month, day)
 					refuge.Dates[formattedDate] = places
 					log.Printf("🎉 %s - Date %s: %s places available", refuge.Name, formattedDate, places)
 				}
@@ -199,13 +200,13 @@ func parseRefugeContent(content string, refuge *Refuge) error {
 	// Find all full dates
 	doc.Find(".day.complet").Each(func(i int, s *goquery.Selection) {
 		date := strings.TrimSpace(s.Text())
-		if date != "" {
+        if date != "" {
 			// Convert MM/DD to YYYY-MM-DD
 			parts := strings.Split(date, "/")
 			if len(parts) == 2 {
 				month := parts[0]
 				day := parts[1]
-				formattedDate := fmt.Sprintf("2025-%02s-%02s", month, day)
+                formattedDate := fmt.Sprintf("%04d-%02s-%02s", anchor.Year(), month, day)
 				refuge.Dates[formattedDate] = "Full"
 			}
 		}
