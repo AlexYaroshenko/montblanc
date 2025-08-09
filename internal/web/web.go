@@ -143,7 +143,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .section { padding: 40px 24px; }
         .section h2 { margin: 0 0 16px 0; font-size: 24px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-        .card { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+        .card { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); position: relative; }
+        .card.soon { opacity: .55; }
+        .badge { position: absolute; top: 10px; right: 10px; background: #ffe08a; color: #7a5200; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
         .muted { color: var(--muted); }
         .refuge { background: white; border-radius: 8px; padding: 12px; }
         .dates { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
@@ -233,8 +235,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <div class="grid">
           <div class="card">🏔️ Refuge du Goûter 🇫🇷</div>
           <div class="card">🏔️ Tête Rousse 🇫🇷</div>
-          <div class="card">🏔️ Refuge des Cosmiques 🇫🇷</div>
-          <div class="card">🏔️ Rifugio Torino 🇮🇹</div>
+          <div class="card soon">🏔️ Refuge des Cosmiques 🇫🇷 <span class="badge">soon</span></div>
+          <div class="card soon">🏔️ Rifugio Torino 🇮🇹 <span class="badge">soon</span></div>
         </div>
       </div>
     </section>
@@ -249,7 +251,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div>
                   <label class="muted">{{T "chat_id"}}</label>
-                  <input name="chat_id" required placeholder="123456789" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;" />
+                  <input name="chat_id" required placeholder="123456789" pattern="[0-9]+" inputmode="numeric" title="Enter numeric Telegram Chat ID (use /id in bot)" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;" />
                 </div>
                 <div>
                   <label class="muted">{{T "language"}}</label>
@@ -404,18 +406,50 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	chatID := r.FormValue("chat_id")
-	language := r.FormValue("language")
-	refuge := r.FormValue("refuge")
-	dateFrom := r.FormValue("date_from")
-	dateTo := r.FormValue("date_to")
+    chatID := r.FormValue("chat_id")
+    language := r.FormValue("language")
+    refuge := r.FormValue("refuge")
+    dateFrom := r.FormValue("date_from")
+    dateTo := r.FormValue("date_to")
 
 	if chatID == "" {
 		http.Error(w, "chat_id required", http.StatusBadRequest)
 		return
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
+    // server-side validation
+    // chatID must be numeric
+    if !digitsOnly(chatID) {
+        http.Error(w, "chat_id must be numeric", http.StatusBadRequest)
+        return
+    }
+    // language allowlist
+    allowedLang := map[string]bool{"en": true, "de": true, "fr": true, "es": true, "it": true}
+    if language != "" && !allowedLang[language] {
+        http.Error(w, "unsupported language", http.StatusBadRequest)
+        return
+    }
+    // refuge allowlist (currently only 2 supported plus any)
+    allowedRefuge := map[string]bool{"*": true, "Tête Rousse": true, "du Goûter": true}
+    if refuge != "" && !allowedRefuge[refuge] {
+        http.Error(w, "unsupported refuge", http.StatusBadRequest)
+        return
+    }
+    // date range validation if both provided
+    if dateFrom != "" && dateTo != "" {
+        df, err1 := time.Parse("2006-01-02", dateFrom)
+        dt, err2 := time.Parse("2006-01-02", dateTo)
+        if err1 != nil || err2 != nil {
+            http.Error(w, "invalid date format (expected YYYY-MM-DD)", http.StatusBadRequest)
+            return
+        }
+        if df.After(dt) {
+            http.Error(w, "date_from must be before or equal to date_to", http.StatusBadRequest)
+            return
+        }
+    }
+
+    dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError)
 		return
@@ -438,6 +472,15 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
     // notify admins
     notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s (web form)", chatID, language, refuge, dateFrom, dateTo))
 	http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
+}
+
+// digitsOnly returns true if s contains only ASCII digits
+func digitsOnly(s string) bool {
+    if s == "" { return false }
+    for _, r := range s {
+        if r < '0' || r > '9' { return false }
+    }
+    return true
 }
 
 // isAdmin checks if chatID present in TELEGRAM_CHAT_IDS env (admin list)
