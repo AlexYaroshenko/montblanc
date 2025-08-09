@@ -189,7 +189,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; }
         .lang { font-size: 14px; color: var(--muted); }
         .lang a { margin-left: 8px; }
-        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('https://upload.wikimedia.org/wikipedia/commons/5/5d/Mont_Blanc_from_Aiguille_du_Midi.jpg'); background-size: cover; background-position: center; color: white; text-align: center; }
+        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('/static/hero-montblanc.jpg'); background-size: cover; background-position: center; color: white; text-align: center; }
         .hero h1 { margin: 0 0 12px 0; font-size: 42px; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.45); }
         .hero p { margin: 0 auto 20px; max-width: 760px; color: #dfe7ff; }
         .cta { display: inline-flex; gap: 12px; }
@@ -250,11 +250,11 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         </div>
         <div class="hero-photos">
           <div class="photo">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/5/5d/Mont_Blanc_from_Aiguille_du_Midi.jpg" alt="Mont Blanc" loading="lazy" width="260" height="160" referrerpolicy="no-referrer"/>
+            <img src="/static/hero-montblanc.jpg" alt="Mont Blanc" loading="lazy" width="260" height="160"/>
             <div class="caption">Mont Blanc</div>
           </div>
           <div class="photo">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/2/23/Refuge_du_Go%C3%BBter_3835m.jpg" alt="Refuge du Goûter" loading="lazy" width="260" height="160" referrerpolicy="no-referrer"/>
+            <img src="/static/refuge-gouter.jpg" alt="Refuge du Goûter" loading="lazy" width="260" height="160"/>
             <div class="caption">Refuge du Goûter</div>
           </div>
         </div>
