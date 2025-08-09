@@ -1,6 +1,7 @@
 package parser
 
 import (
+    "errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +19,9 @@ type Refuge struct {
 	Name  string
 	Dates map[string]string // date -> status
 }
+
+// ErrReauthNeeded indicates the fetched page shows a login/email prompt and requires re-authentication
+var ErrReauthNeeded = errors.New("reauthentication required")
 
 // makeAvailabilityRequest makes an API call to check refuge availability
 func makeAvailabilityRequest(refugeName string, structureID string, targetDate time.Time) (string, error) {
@@ -105,8 +109,8 @@ func ParseRefugeAvailability(baseURL string, targetDate time.Time) ([]Refuge, er
 			Dates: make(map[string]string),
 		}
 
-        // Parse HTML content with targetDate as month/year anchor
-        if err := parseRefugeContent(content, &refuge, targetDate); err != nil {
+		// Parse HTML content with targetDate as month/year anchor
+		if err := parseRefugeContent(content, &refuge, targetDate); err != nil {
 			log.Printf("Warning: Failed to parse HTML for %s: %v", refugeName, err)
 			continue
 		}
@@ -152,6 +156,11 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 		return fmt.Errorf("failed to parse HTML: %v", err)
 	}
 
+    // Detect login-required page
+    if strings.Contains(content, "My email") {
+        return ErrReauthNeeded
+    }
+
 	// if content contains "Your Rank in the waiting room"
 	// try again in 1 minute with a new API call
 	if strings.Contains(content, "Your Rank in the waiting room") {
@@ -166,13 +175,13 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 		} else {
 			structureID = "BK_STRUCTURE:30"
 		}
-        newContent, err := makeAvailabilityRequest(refuge.Name, structureID, time.Now())
+		newContent, err := makeAvailabilityRequest(refuge.Name, structureID, time.Now())
 		if err != nil {
 			return err
 		}
 
 		// Parse the new HTML content
-        return parseRefugeContent(newContent, refuge, anchor)
+		return parseRefugeContent(newContent, refuge, anchor)
 	}
 
 	// Find all available dates
@@ -180,7 +189,7 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 		dateSpan := s.Find("span.date").First()
 		placeSpan := s.Find("span.place").First()
 
-        if dateSpan.Length() > 0 && placeSpan.Length() > 0 {
+		if dateSpan.Length() > 0 && placeSpan.Length() > 0 {
 			date := strings.TrimSpace(dateSpan.Text())
 			places := strings.TrimSpace(placeSpan.Text())
 
@@ -189,7 +198,7 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 				if len(parts) == 2 {
 					month := parts[0]
 					day := parts[1]
-                    formattedDate := fmt.Sprintf("%04d-%02s-%02s", anchor.Year(), month, day)
+					formattedDate := fmt.Sprintf("%04d-%02s-%02s", anchor.Year(), month, day)
 					refuge.Dates[formattedDate] = places
 					log.Printf("🎉 %s - Date %s: %s places available", refuge.Name, formattedDate, places)
 				}
@@ -200,13 +209,13 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 	// Find all full dates
 	doc.Find(".day.complet").Each(func(i int, s *goquery.Selection) {
 		date := strings.TrimSpace(s.Text())
-        if date != "" {
+		if date != "" {
 			// Convert MM/DD to YYYY-MM-DD
 			parts := strings.Split(date, "/")
 			if len(parts) == 2 {
 				month := parts[0]
 				day := parts[1]
-                formattedDate := fmt.Sprintf("%04d-%02s-%02s", anchor.Year(), month, day)
+				formattedDate := fmt.Sprintf("%04d-%02s-%02s", anchor.Year(), month, day)
 				refuge.Dates[formattedDate] = "Full"
 			}
 		}

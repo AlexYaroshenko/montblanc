@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+    "errors"
 	"os"
 	"os/signal"
 	"sort"
@@ -117,11 +118,16 @@ func main() {
 			monthStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 			monthAnchors = []time.Time{monthStart, monthStart.AddDate(0, 1, 0), monthStart.AddDate(0, 2, 0)}
 
-			refuges, err := fetchRefugesWindow(refugeURL, monthAnchors)
-			if err != nil {
-				log.Printf("❌ Failed to check availability: %v", err)
-				continue
-			}
+            refuges, err := fetchRefugesWindow(refugeURL, monthAnchors)
+            if err != nil {
+                if errors.Is(err, parser.ErrReauthNeeded) {
+                    _ = sendToSubscribersOrEnv(st, "⚠️ Session requires re-authentication (found 'My email' in response). Please update PHPSESSID.")
+                    log.Printf("⚠️ Re-authentication required")
+                } else {
+                    log.Printf("❌ Failed to check availability: %v", err)
+                }
+                continue
+            }
 
 			// Update web interface with current time
 			web.UpdateState(refuges, time.Now())
