@@ -10,7 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
+    "strings"
+    "sort"
 	"sync"
 	"syscall"
 	"time"
@@ -109,15 +110,63 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
 
-	view := struct {
-		Refuges   []parser.Refuge
-		LastCheck time.Time
-		BotLink   string
-	}{
-		Refuges:   state.Refuges,
-		LastCheck: state.LastCheck,
-		BotLink:   botLink,
-	}
+    // Build small table model for demo (earliest up to 3 dates across refuges)
+    datesSet := make(map[string]struct{})
+    for _, rf := range state.Refuges {
+        for d := range rf.Dates {
+            datesSet[d] = struct{}{}
+        }
+    }
+    allDates := make([]string, 0, len(datesSet))
+    for d := range datesSet {
+        allDates = append(allDates, d)
+    }
+    sort.Strings(allDates)
+    if len(allDates) > 3 {
+        allDates = allDates[:3]
+    }
+    tableHeaders := make([]string, len(allDates))
+    for i, d := range allDates {
+        if t, err := time.Parse("2006-01-02", d); err == nil {
+            tableHeaders[i] = t.Format("02 Jan")
+        } else {
+            tableHeaders[i] = d
+        }
+    }
+    type tableRow struct {
+        Name  string
+        Cells []string
+    }
+    rows := make([]tableRow, 0, len(state.Refuges))
+    for _, rf := range state.Refuges {
+        cells := make([]string, len(allDates))
+        for i, d := range allDates {
+            if s, ok := rf.Dates[d]; ok {
+                if s == "Full" {
+                    cells[i] = "—"
+                } else {
+                    cells[i] = s
+                }
+            } else {
+                cells[i] = ""
+            }
+        }
+        rows = append(rows, tableRow{Name: rf.Name, Cells: cells})
+    }
+
+    view := struct {
+        Refuges      []parser.Refuge
+        LastCheck    time.Time
+        BotLink      string
+        TableHeaders []string
+        Rows         []tableRow
+    }{
+        Refuges:      state.Refuges,
+        LastCheck:    state.LastCheck,
+        BotLink:      botLink,
+        TableHeaders: tableHeaders,
+        Rows:         rows,
+    }
 	state.mu.RUnlock()
 
 	tmpl := `
@@ -212,21 +261,42 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
     <section id="demo" class="section">
       <div class="container">
         <h2>{{T "demo_title"}}</h2>
-        <div class="grid">
-          {{range .Refuges}}
+        <div class="grid" style="grid-template-columns: 2fr 1fr; align-items: start;">
           <div class="card">
-            <h3>{{.Name}}</h3>
-            <div class="dates">
-              {{range $date, $status := .Dates}}
-                {{if eq $status "Full"}}
-                  <div class="date full">{{$date}} · {{T "full"}}</div>
-                {{else}}
-                  <div class="date available">{{$date}} <span class="places">{{$status}} {{T "places"}}</span></div>
+            <table style="width:100%; border-collapse: collapse;">
+              <thead>
+                <tr>
+                  <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Приют</th>
+                  {{range .TableHeaders}}
+                    <th style="text-align:center; padding:8px; border-bottom:1px solid #e5e7eb;">{{.}}</th>
+                  {{end}}
+                </tr>
+              </thead>
+              <tbody>
+                {{range .Rows}}
+                  <tr>
+                    <td style="padding:8px; border-bottom:1px solid #f0f2f5;">{{.Name}}</td>
+                    {{range .Cells}}
+                      <td style="text-align:center; padding:8px; border-bottom:1px solid #f0f2f5;">{{.}}</td>
+                    {{end}}
+                  </tr>
                 {{end}}
-              {{end}}
+              </tbody>
+            </table>
+          </div>
+          <div class="card" style="background:#0f62fe; color:white;">
+            <div style="display:flex; gap:12px;">
+              <div style="font-size:24px;">📶</div>
+              <div>
+                <div style="font-weight:700;">Свободные места</div>
+                <div style="opacity:.9;">в Tête Rousse</div>
+                <div style="opacity:.9;">13.05.2024</div>
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              <a class="btn secondary" href="{{.BotLink}}" target="_blank" rel="noopener" style="background:white;color:#0f62fe;">Попробовать</a>
             </div>
           </div>
-          {{end}}
         </div>
         <div class="last-check">{{T "last_updated"}}: {{.LastCheck.Format "2006-01-02 15:04:05"}}</div>
       </div>
