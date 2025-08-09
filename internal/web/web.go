@@ -99,13 +99,22 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	lang := i18n.DetectLang(r)
 	// Copy state under lock into a lightweight view model (no mutex)
 	state.mu.RLock()
-	view := struct {
-		Refuges   []parser.Refuge
-		LastCheck time.Time
-	}{
-		Refuges:   state.Refuges,
-		LastCheck: state.LastCheck,
-	}
+    // Build bot deep link
+    botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
+    if botUsername == "" {
+        botUsername = "your_bot_username"
+    }
+    botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
+
+    view := struct {
+        Refuges   []parser.Refuge
+        LastCheck time.Time
+        BotLink   string
+    }{
+        Refuges:   state.Refuges,
+        LastCheck: state.LastCheck,
+        BotLink:   botLink,
+    }
 	state.mu.RUnlock()
 
 	tmpl := `
@@ -143,6 +152,11 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .date.available { background: #e6ffe6; color: var(--ok); font-weight: 700; }
         .places { display: block; font-size: 12px; margin-top: 4px; color: #1b5e20; }
         .last-check { color: var(--muted); font-size: 13px; margin-top: 8px; }
+        /* Hero photos */
+        .hero-photos { display: flex; gap: 12px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+        .hero-photos .photo { display: flex; flex-direction: column; align-items: center; }
+        .hero-photos img { width: 260px; height: 160px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+        .hero-photos .caption { font-size: 12px; color: #dfe7ff; margin-top: 6px; }
     </style>
 </head>
 <body>
@@ -164,6 +178,17 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <div class="cta">
           <a class="btn primary" href="#demo">{{T "cta_check"}}</a>
           <a class="btn secondary" href="#subscribe">{{T "cta_subscribe"}}</a>
+          <a class="btn secondary" href="{{.BotLink}}" target="_blank" rel="noopener">📲 Subscribe via Telegram</a>
+        </div>
+        <div class="hero-photos">
+          <div class="photo">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/5/5d/Mont_Blanc_from_Aiguille_du_Midi.jpg" alt="Mont Blanc" loading="lazy" />
+            <div class="caption">Mont Blanc</div>
+          </div>
+          <div class="photo">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/2/23/Refuge_du_Go%C3%BBter_3835m.jpg" alt="Refuge du Goûter" loading="lazy" />
+            <div class="caption">Refuge du Goûter</div>
+          </div>
         </div>
       </div>
     </section>
@@ -219,6 +244,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <h2>{{T "cta_subscribe"}}</h2>
         <div class="grid">
           <div class="card">
+            <p class="muted" style="margin:0 0 8px;">Рекомендуем: подпишитесь через Telegram в один клик — нажмите кнопку выше и отправьте /start. Если уже знаете свой Chat ID, можно заполнить форму ниже.</p>
             <form method="post" action="/subscribe">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div>
@@ -316,7 +342,7 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var upd telegram.Update
+    var upd telegram.Update
 	if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -349,8 +375,9 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	}
     _ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
 
-    // admin command: list subscribers
+    // commands
     txt := strings.TrimSpace(upd.Message.Text)
+    if txt == "/id" { _ = telegram.SendMessageTo(chatID, "Your Chat ID: "+chatID); w.WriteHeader(http.StatusOK); return }
     if txt == "/subscribers" && isAdmin(chatID) {
         subs, err := ps.ListSubscribers()
         if err != nil { _ = telegram.SendMessageTo(chatID, "Error fetching subscribers") } else {
