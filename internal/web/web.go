@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+    "strings"
 	"sync"
 	"syscall"
 	"time"
@@ -346,10 +347,23 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
 		lang = upd.Message.From.LanguageCode
 	}
-	_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+    _ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+
+    // admin command: list subscribers
+    txt := strings.TrimSpace(upd.Message.Text)
+    if txt == "/subscribers" && isAdmin(chatID) {
+        subs, err := ps.ListSubscribers()
+        if err != nil { _ = telegram.SendMessageTo(chatID, "Error fetching subscribers") } else {
+            sendSubscribersList(chatID, subs)
+        }
+        w.WriteHeader(http.StatusOK)
+        return
+    }
 
 	// greet
 	_ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
+    // notify admins
+    notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s (webhook)", chatID, lang))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -386,7 +400,7 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ps.Close()
 
-	if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
+    if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
 		http.Error(w, "save subscriber error", http.StatusInternalServerError)
 		return
 	}
@@ -394,5 +408,47 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// optional: confirm in Telegram
 	_ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
+    // notify admins
+    notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s (web form)", chatID, language, refuge, dateFrom, dateTo))
 	http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
+}
+
+// isAdmin checks if chatID present in TELEGRAM_CHAT_IDS env (admin list)
+func isAdmin(chatID string) bool {
+    ids := os.Getenv("TELEGRAM_CHAT_IDS")
+    if ids == "" { return false }
+    for _, id := range telegram.ParseChatIDs(ids) {
+        if id == chatID { return true }
+    }
+    return false
+}
+
+// notifyAdmins sends a message to all admin chat ids from TELEGRAM_CHAT_IDS
+func notifyAdmins(message string) {
+    ids := os.Getenv("TELEGRAM_CHAT_IDS")
+    if ids == "" { return }
+    for _, id := range telegram.ParseChatIDs(ids) {
+        _ = telegram.SendMessageTo(id, message)
+    }
+}
+
+// sendSubscribersList sends the list to one chat, chunked to avoid message limits
+func sendSubscribersList(chatID string, subs []store.Subscriber) {
+    const chunkSize = 50
+    total := len(subs)
+    if total == 0 { _ = telegram.SendMessageTo(chatID, "No subscribers"); return }
+    // Build lines
+    lines := make([]string, 0, total+1)
+    header := fmt.Sprintf("Subscribers (%d):", total)
+    lines = append(lines, header)
+    for _, s := range subs {
+        line := fmt.Sprintf("- %s (lang=%s, plan=%s, active=%t)", s.ChatID, s.Language, s.Plan, s.IsActive)
+        lines = append(lines, line)
+    }
+    // send in chunks
+    for i := 0; i < len(lines); i += chunkSize {
+        end := i + chunkSize
+        if end > len(lines) { end = len(lines) }
+        _ = telegram.SendMessageTo(chatID, strings.Join(lines[i:end], "\n"))
+    }
 }
