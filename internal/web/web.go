@@ -96,8 +96,16 @@ func UpdateState(refuges []parser.Refuge, lastCheck time.Time) {
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
     lang := i18n.DetectLang(r)
-	state.mu.RLock()
-	defer state.mu.RUnlock()
+    // Copy state under lock into a lightweight view model (no mutex)
+    state.mu.RLock()
+    view := struct {
+        Refuges   []parser.Refuge
+        LastCheck time.Time
+    }{
+        Refuges:   state.Refuges,
+        LastCheck: state.LastCheck,
+    }
+    state.mu.RUnlock()
 
 	tmpl := `
 <!DOCTYPE html>
@@ -255,7 +263,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 </body>
 </html>`
 
-	t, err := template.New("home").Funcs(template.FuncMap{
+    t, err := template.New("home").Funcs(template.FuncMap{
         "T": func(key string) string { return i18n.T(lang, key) },
     }).Parse(tmpl)
 	if err != nil {
@@ -263,7 +271,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := t.Execute(w, state); err != nil {
+    if err := t.Execute(w, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -317,13 +325,15 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 
     // persist subscriber using Bolt as a local store
     // On Render we'll swap to Postgres impl, interface stays the same
-    bs, err := store.OpenBolt("data.db")
+    dbURL := os.Getenv("DATABASE_URL")
+    if dbURL == "" { log.Printf("store open error: DATABASE_URL is empty"); w.WriteHeader(http.StatusOK); return }
+    ps, err := store.OpenPostgres(context.Background(), dbURL)
     if err != nil { log.Printf("store open error: %v", err); w.WriteHeader(http.StatusOK); return }
-    defer bs.Close()
+    defer ps.Close()
 
     lang := "en"
     if upd.Message.From != nil && upd.Message.From.LanguageCode != "" { lang = upd.Message.From.LanguageCode }
-    _ = bs.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+    _ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
 
     // greet
     _ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
@@ -348,15 +358,17 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
     if chatID == "" { http.Error(w, "chat_id required", http.StatusBadRequest); return }
 
-    bs, err := store.OpenBolt("data.db")
+    dbURL := os.Getenv("DATABASE_URL")
+    if dbURL == "" { http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError); return }
+    ps, err := store.OpenPostgres(context.Background(), dbURL)
     if err != nil { http.Error(w, "store open error", http.StatusInternalServerError); return }
-    defer bs.Close()
+    defer ps.Close()
 
-    if err := bs.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
+    if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
         http.Error(w, "save subscriber error", http.StatusInternalServerError)
         return
     }
-    _, _ = bs.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
+    _, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
 
     // optional: confirm in Telegram
     _ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
