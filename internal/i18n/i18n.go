@@ -31,6 +31,9 @@ var supported = map[string]map[string]string{
         "step3":              "We notify you via Telegram",
         "demo_title":         "Live availability",
         "refuges_title":      "Covered refuges",
+        "sample_free_spots":  "Free spots",
+        "sample_in":          "in",
+        "try":                "Try",
 	},
 	"de": {
         "title":              "Hüttenverfügbarkeit",
@@ -56,6 +59,9 @@ var supported = map[string]map[string]string{
         "step3":              "Wir benachrichtigen Sie per Telegram",
         "demo_title":         "Live-Verfügbarkeit",
         "refuges_title":      "Abgedeckte Hütten",
+        "sample_free_spots":  "Freie Plätze",
+        "sample_in":          "in",
+        "try":                "Ausprobieren",
 	},
 	"fr": {
         "title":              "Disponibilité des refuges",
@@ -81,6 +87,9 @@ var supported = map[string]map[string]string{
         "step3":              "Nous vous avertissons sur Telegram",
         "demo_title":         "Disponibilité en direct",
         "refuges_title":      "Refuges couverts",
+        "sample_free_spots":  "Places libres",
+        "sample_in":          "à",
+        "try":                "Essayer",
 	},
 	"es": {
         "title":              "Disponibilidad de refugios",
@@ -106,6 +115,9 @@ var supported = map[string]map[string]string{
         "step3":              "Te avisamos por Telegram",
         "demo_title":         "Disponibilidad en vivo",
         "refuges_title":      "Refugios cubiertos",
+        "sample_free_spots":  "Plazas libres",
+        "sample_in":          "en",
+        "try":                "Probar",
 	},
 	"it": {
         "title":              "Disponibilità dei rifugi",
@@ -131,6 +143,9 @@ var supported = map[string]map[string]string{
         "step3":              "Ti avvisiamo su Telegram",
         "demo_title":         "Disponibilità live",
         "refuges_title":      "Rifugi coperti",
+        "sample_free_spots":  "Posti liberi",
+        "sample_in":          "a",
+        "try":                "Provare",
 	},
 }
 
