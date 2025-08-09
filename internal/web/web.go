@@ -108,7 +108,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	if botUsername == "" {
 		botUsername = "montblanc_booking_bot"
 	}
-	botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
+    botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
+    // Google Analytics
+    gaID := os.Getenv("GA_MEASUREMENT_ID")
 
 	// Build small table model for demo (earliest up to 3 dates across refuges)
 	datesSet := make(map[string]struct{})
@@ -154,18 +156,20 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, tableRow{Name: rf.Name, Cells: cells})
 	}
 
-	view := struct {
+    view := struct {
 		Refuges      []parser.Refuge
 		LastCheck    time.Time
 		BotLink      string
 		TableHeaders []string
 		Rows         []tableRow
+        GAID         string
 	}{
 		Refuges:      state.Refuges,
 		LastCheck:    state.LastCheck,
 		BotLink:      botLink,
 		TableHeaders: tableHeaders,
-		Rows:         rows,
+        Rows:         rows,
+        GAID:         gaID,
 	}
 	state.mu.RUnlock()
 
@@ -212,6 +216,16 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .hero-photos img { width: 260px; height: 160px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); box-shadow: 0 6px 20px rgba(0,0,0,.35); }
         .hero-photos .caption { font-size: 12px; color: #dfe7ff; margin-top: 6px; }
     </style>
+    {{if .GAID}}
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{.GAID}}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);} 
+      gtag('js', new Date());
+      gtag('config', '{{.GAID}}');
+    </script>
+    {{end}}
 </head>
 <body>
     <div class="nav">
