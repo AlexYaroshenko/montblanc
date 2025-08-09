@@ -1,8 +1,7 @@
 package parser
 
 import (
-	"errors"
-	"fmt"
+    "fmt"
 	"io"
 	"log"
 	"net/http"
@@ -19,9 +18,6 @@ type Refuge struct {
 	Name  string
 	Dates map[string]string // date -> status
 }
-
-// ErrReauthNeeded indicates the fetched page shows a login/email prompt and requires re-authentication
-var ErrReauthNeeded = errors.New("reauthentication required")
 
 // makeAvailabilityRequest makes an API call to check refuge availability
 func makeAvailabilityRequest(refugeName string, structureID string, targetDate time.Time) (string, error) {
@@ -156,10 +152,6 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 		return fmt.Errorf("failed to parse HTML: %v", err)
 	}
 
-	// Detect login-required page
-	if strings.Contains(content, "My email") {
-		return ErrReauthNeeded
-	}
 
 	// if content contains "Your Rank in the waiting room"
 	// try again in 1 minute with a new API call
