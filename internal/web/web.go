@@ -176,6 +176,10 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		TableHeaders []string
 		Rows         []tableRow
 		GAID         string
+		HasSample    bool
+		SampleRefuge string
+		SampleDate   string
+		SamplePlaces string
 	}{
 		Refuges:      state.Refuges,
 		LastCheck:    state.LastCheck,
@@ -185,6 +189,43 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		GAID:         gaID,
 	}
 	state.mu.RUnlock()
+
+	// Compute sample card data: earliest available date (prefer Tête Rousse)
+	var (
+		bestRefuge string
+		bestDate   string
+		bestPlaces string
+	)
+    // Build a map to check preference quickly
+	prefIndex := map[string]int{"Tête Rousse": 0, "du Goûter": 1}
+	bestScore := 999
+	for _, rf := range view.Refuges {
+		for d, s := range rf.Dates {
+			if s == "Full" { continue }
+			// score by preference and date
+			dateScore := d
+			p := 10
+			if idx, ok := prefIndex[rf.Name]; ok { p = idx }
+			scoreStr := fmt.Sprintf("%02d-%s", p, dateScore)
+			// lexicographically smaller is better
+			if scoreStr < fmt.Sprintf("%02d-%s", bestScore, bestDate) {
+				bestScore = p
+				bestRefuge = rf.Name
+				bestDate = d
+				bestPlaces = s
+			}
+		}
+	}
+	if bestDate != "" {
+		// format date as DD.MM.YYYY for nicer display
+		if t, err := time.Parse("2006-01-02", bestDate); err == nil {
+			bestDate = t.Format("02.01.2006")
+		}
+		view.HasSample = true
+		view.SampleRefuge = bestRefuge
+		view.SampleDate = bestDate
+		view.SamplePlaces = bestPlaces
+	}
 
 	tmpl := `
 <!DOCTYPE html>
@@ -316,8 +357,12 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
               <div style="font-size:24px;">📶</div>
               <div>
                 <div style="font-weight:700;">{{T "sample_free_spots"}}</div>
-                <div style="opacity:.9;">{{T "sample_in"}} Tête Rousse</div>
-                <div style="opacity:.9;">13.05.2024</div>
+                {{if .HasSample}}
+                <div style="opacity:.9;">{{T "sample_in"}} {{.SampleRefuge}}</div>
+                <div style="opacity:.9;">{{.SampleDate}} · {{.SamplePlaces}} {{T "places"}}</div>
+                {{else}}
+                <div style="opacity:.9;">—</div>
+                {{end}}
               </div>
             </div>
             <div style="margin-top:12px;">
