@@ -1,30 +1,30 @@
 package web
 
 import (
-    "context"
-    "crypto/hmac"
-    "crypto/sha256"
-    "embed"
-    "encoding/base64"
-    "encoding/json"
-    "fmt"
-    "html/template"
-    "io/fs"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "sort"
-    "strconv"
-    "strings"
-    "sync"
-    "syscall"
-    "time"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"embed"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
 
-    "github.com/AlexYaroshenko/montblanc/internal/i18n"
-    "github.com/AlexYaroshenko/montblanc/internal/parser"
-    "github.com/AlexYaroshenko/montblanc/internal/store"
-    "github.com/AlexYaroshenko/montblanc/internal/telegram"
+	"github.com/AlexYaroshenko/montblanc/internal/i18n"
+	"github.com/AlexYaroshenko/montblanc/internal/parser"
+	"github.com/AlexYaroshenko/montblanc/internal/store"
+	"github.com/AlexYaroshenko/montblanc/internal/telegram"
 )
 
 var (
@@ -473,54 +473,66 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
 
 	// commands
-    txt := strings.TrimSpace(upd.Message.Text)
-    if strings.HasPrefix(txt, "/start ps_") {
-        // process deep link
-        payload := strings.TrimPrefix(txt, "/start ps_")
-        secret := os.Getenv("DEEP_LINK_SECRET")
-        if secret == "" { secret = "dev" }
-        // decode
-        raw, err := base64.RawURLEncoding.DecodeString(payload)
-        if err == nil {
-            parts := strings.SplitN(string(raw), ".", 2)
-            if len(parts) == 2 {
-                params := parts[0]
-                sigB64 := parts[1]
-                sig, err2 := base64.RawURLEncoding.DecodeString(sigB64)
-                if err2 == nil {
-                    mac := hmac.New(sha256.New, []byte(secret))
-                    mac.Write([]byte(params))
-                    if hmac.Equal(mac.Sum(nil), sig) {
-                        // parse params r=..&f=..&t=..&l=..
-                        vals := map[string]string{}
-                        for _, kv := range strings.Split(params, "&") {
-                            if kv == "" { continue }
-                            p := strings.SplitN(kv, "=", 2)
-                            if len(p) == 2 { vals[p[0]] = p[1] }
-                        }
-                        refuge := vals["r"]
-                        dateFrom := vals["f"]
-                        dateTo := vals["t"]
-                        lang := vals["l"]
-                        // expand dates back to YYYY-MM-DD if present
-                        if len(dateFrom) == 8 { dateFrom = dateFrom[:4]+"-"+dateFrom[4:6]+"-"+dateFrom[6:] }
-                        if len(dateTo) == 8 { dateTo = dateTo[:4]+"-"+dateTo[4:6]+"-"+dateTo[6:] }
+	txt := strings.TrimSpace(upd.Message.Text)
+	if strings.HasPrefix(txt, "/start ps_") {
+		// process deep link
+		payload := strings.TrimPrefix(txt, "/start ps_")
+		secret := os.Getenv("DEEP_LINK_SECRET")
+		if secret == "" {
+			secret = "dev"
+		}
+		// decode
+		raw, err := base64.RawURLEncoding.DecodeString(payload)
+		if err == nil {
+			parts := strings.SplitN(string(raw), ".", 2)
+			if len(parts) == 2 {
+				params := parts[0]
+				sigB64 := parts[1]
+				sig, err2 := base64.RawURLEncoding.DecodeString(sigB64)
+				if err2 == nil {
+					mac := hmac.New(sha256.New, []byte(secret))
+					mac.Write([]byte(params))
+					if hmac.Equal(mac.Sum(nil), sig) {
+						// parse params r=..&f=..&t=..&l=..
+						vals := map[string]string{}
+						for _, kv := range strings.Split(params, "&") {
+							if kv == "" {
+								continue
+							}
+							p := strings.SplitN(kv, "=", 2)
+							if len(p) == 2 {
+								vals[p[0]] = p[1]
+							}
+						}
+						refuge := vals["r"]
+						dateFrom := vals["f"]
+						dateTo := vals["t"]
+						lang := vals["l"]
+						// expand dates back to YYYY-MM-DD if present
+						if len(dateFrom) == 8 {
+							dateFrom = dateFrom[:4] + "-" + dateFrom[4:6] + "-" + dateFrom[6:]
+						}
+						if len(dateTo) == 8 {
+							dateTo = dateTo[:4] + "-" + dateTo[4:6] + "-" + dateTo[6:]
+						}
 
-                        if lang == "" { lang = "en" }
-                        _ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang, IsActive: true})
-                        _, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
-                        _ = telegram.SendMessageTo(chatID, "✅ Subscription saved from web link. We'll notify you when matching dates appear.")
-                        notifyAdmins(fmt.Sprintf("New subscription via deep link: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s", chatID, lang, refuge, dateFrom, dateTo))
-                        w.WriteHeader(http.StatusOK)
-                        return
-                    }
-                }
-            }
-        }
-        _ = telegram.SendMessageTo(chatID, "❌ Invalid or expired link. Please try again from the website.")
-        w.WriteHeader(http.StatusOK)
-        return
-    }
+						if lang == "" {
+							lang = "en"
+						}
+						_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang, IsActive: true})
+						_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
+						_ = telegram.SendMessageTo(chatID, "✅ Subscription saved from web link. We'll notify you when matching dates appear.")
+						notifyAdmins(fmt.Sprintf("New subscription via deep link: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s", chatID, lang, refuge, dateFrom, dateTo))
+						w.WriteHeader(http.StatusOK)
+						return
+					}
+				}
+			}
+		}
+		_ = telegram.SendMessageTo(chatID, "❌ Invalid or expired link. Please try again from the website.")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if txt == "/id" {
 		_ = telegram.SendMessageTo(chatID, "Your Chat ID: "+chatID)
 		w.WriteHeader(http.StatusOK)
@@ -558,7 +570,7 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	refuge := r.FormValue("refuge")
 	dateFrom := r.FormValue("date_from")
 	dateTo := r.FormValue("date_to")
-    // no chatID in the new flow
+	// no chatID in the new flow
 	// language allowlist
 	allowedLang := map[string]bool{"en": true, "de": true, "fr": true, "es": true, "it": true}
 	if language != "" && !allowedLang[language] {
@@ -590,20 +602,24 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError)
 		return
 	}
-    // Build deep-link payload: r, f, t, l + HMAC
-    secret := os.Getenv("DEEP_LINK_SECRET")
-    if secret == "" { secret = "dev" }
-    // compact dates
-    f := strings.ReplaceAll(dateFrom, "-", "")
-    t := strings.ReplaceAll(dateTo, "-", "")
-    params := fmt.Sprintf("r=%s&f=%s&t=%s&l=%s", refuge, f, t, language)
-    mac := hmac.New(sha256.New, []byte(secret))
-    mac.Write([]byte(params))
-    sig := mac.Sum(nil)
-    payload := base64.RawURLEncoding.EncodeToString([]byte(params+"."+base64.RawURLEncoding.EncodeToString(sig)))
-    botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
-    if botUsername == "" { botUsername = "montblanc_booking_bot" }
-    http.Redirect(w, r, fmt.Sprintf("https://t.me/%s?start=ps_%s", botUsername, payload), http.StatusSeeOther)
+	// Build deep-link payload: r, f, t, l + HMAC
+	secret := os.Getenv("DEEP_LINK_SECRET")
+	if secret == "" {
+		secret = "dev"
+	}
+	// compact dates
+	f := strings.ReplaceAll(dateFrom, "-", "")
+	t := strings.ReplaceAll(dateTo, "-", "")
+	params := fmt.Sprintf("r=%s&f=%s&t=%s&l=%s", refuge, f, t, language)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(params))
+	sig := mac.Sum(nil)
+	payload := base64.RawURLEncoding.EncodeToString([]byte(params + "." + base64.RawURLEncoding.EncodeToString(sig)))
+	botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
+	if botUsername == "" {
+		botUsername = "montblanc_booking_bot"
+	}
+	http.Redirect(w, r, fmt.Sprintf("https://t.me/%s?start=ps_%s", botUsername, payload), http.StatusSeeOther)
 }
 
 // digitsOnly returns true if s contains only ASCII digits
