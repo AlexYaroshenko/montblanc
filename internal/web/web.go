@@ -108,9 +108,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	if botUsername == "" {
 		botUsername = "montblanc_booking_bot"
 	}
-    botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
-    // Google Analytics
-    gaID := os.Getenv("GA_MEASUREMENT_ID")
+	botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
+	// Google Analytics
+	gaID := os.Getenv("GA_MEASUREMENT_ID")
 
 	// Build small table model for demo (earliest up to 3 dates across refuges)
 	datesSet := make(map[string]struct{})
@@ -156,20 +156,20 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, tableRow{Name: rf.Name, Cells: cells})
 	}
 
-    view := struct {
+	view := struct {
 		Refuges      []parser.Refuge
 		LastCheck    time.Time
 		BotLink      string
 		TableHeaders []string
 		Rows         []tableRow
-        GAID         string
+		GAID         string
 	}{
 		Refuges:      state.Refuges,
 		LastCheck:    state.LastCheck,
 		BotLink:      botLink,
 		TableHeaders: tableHeaders,
-        Rows:         rows,
-        GAID:         gaID,
+		Rows:         rows,
+		GAID:         gaID,
 	}
 	state.mu.RUnlock()
 
