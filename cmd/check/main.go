@@ -1,7 +1,7 @@
 package main
 
 import (
-    "context"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/AlexYaroshenko/montblanc/internal/parser"
-    "github.com/AlexYaroshenko/montblanc/internal/store"
+	"github.com/AlexYaroshenko/montblanc/internal/store"
 	"github.com/AlexYaroshenko/montblanc/internal/telegram"
 	"github.com/AlexYaroshenko/montblanc/internal/web"
 	"github.com/joho/godotenv"
@@ -29,30 +29,19 @@ func main() {
 		log.Printf("Warning: Error loading .env file: %v", err)
 	}
 
-    // Set hardcoded target date to July 1st, 2025
+	// Set hardcoded target date to July 1st, 2025
 	targetDate := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
 
-    // Open store: prefer Postgres if DATABASE_URL set, else BoltDB as fallback
-    var st store.Store
-    if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
-        if pg, err := store.OpenPostgres(context.Background(), dbURL); err == nil {
-            st = pg
-            log.Printf("📦 Using PostgreSQL store")
-        } else {
-            log.Printf("⚠️ PostgreSQL init failed, falling back to BoltDB: %v", err)
-        }
-    }
-    if st == nil {
-        if bs, err := store.OpenBolt("data.db"); err == nil {
-            st = bs
-            log.Printf("📦 Using BoltDB store")
-        } else {
-            log.Printf("❌ Failed to initialize any store: %v", err)
-        }
-    }
-    if st != nil {
-        defer st.Close()
-    }
+	// Open store: require Postgres
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL is not set")
+	}
+	st, err := store.OpenPostgres(context.Background(), dbURL)
+	if err != nil {
+		log.Fatalf("failed to open postgres: %v", err)
+	}
+	defer st.Close()
 
 	// Track previously notified dates
 	notifiedDates := make(map[string]bool)
@@ -76,11 +65,11 @@ func main() {
 		}
 	}
 
-    // Send start message
-    startMsg := fmt.Sprintf("🚀 Monitoring started for %s\nCheck interval: %v", targetDate.Format("2006-01-02"), checkInterval)
-    if err := sendToSubscribersOrEnv(st, startMsg); err != nil {
-        log.Printf("Warning: Failed to send start message: %v", err)
-    }
+	// Send start message
+	startMsg := fmt.Sprintf("🚀 Monitoring started for %s\nCheck interval: %v", targetDate.Format("2006-01-02"), checkInterval)
+	if err := sendToSubscribersOrEnv(st, startMsg); err != nil {
+		log.Printf("Warning: Failed to send start message: %v", err)
+	}
 
 	// Start web server in a goroutine
 	go func() {
@@ -143,10 +132,10 @@ func main() {
 				}
 			}
 
-            // Notify if no dates were parsed
+			// Notify if no dates were parsed
 			if totalDates == 0 {
 				notification := "⚠️ Warning: No dates were parsed from the response. This might indicate an issue with the website or session."
-                if err := sendToSubscribersOrEnv(st, notification); err != nil {
+				if err := sendToSubscribersOrEnv(st, notification); err != nil {
 					log.Printf("❌ Failed to send warning notification: %v", err)
 				} else {
 					log.Printf("✅ Warning notification sent successfully")
@@ -166,7 +155,7 @@ func main() {
 					fmt.Sprintf("%s: %s places", avail.date, avail.status))
 			}
 
-            // Format notification
+			// Format notification
 			if len(newAvailabilities) > 0 {
 				var notification strings.Builder
 				notification.WriteString("🎉 New availability found!\n\n")
@@ -181,7 +170,7 @@ func main() {
 					}
 				}
 
-                if err := sendToSubscribersOrEnv(st, notification.String()); err != nil {
+				if err := sendToSubscribersOrEnv(st, notification.String()); err != nil {
 					log.Printf("❌ Failed to send notification: %v", err)
 				} else {
 					log.Printf("✅ Notification sent successfully")
@@ -193,8 +182,8 @@ func main() {
 
 		case <-sigChan:
 			log.Println("🛑 Received shutdown signal, stopping...")
-            shutdownMsg := fmt.Sprintf("🛑 Monitoring stopped for %s", targetDate.Format("2006-01-02"))
-            if err := sendToSubscribersOrEnv(st, shutdownMsg); err != nil {
+			shutdownMsg := fmt.Sprintf("🛑 Monitoring stopped for %s", targetDate.Format("2006-01-02"))
+			if err := sendToSubscribersOrEnv(st, shutdownMsg); err != nil {
 				log.Printf("❌ Failed to send shutdown message: %v", err)
 			}
 			return
@@ -204,15 +193,14 @@ func main() {
 
 // sendToSubscribersOrEnv sends to DB/bolt subscribers if available; otherwise falls back to TELEGRAM_CHAT_IDS
 func sendToSubscribersOrEnv(st store.Store, msg string) error {
-    if st != nil {
-        subs, err := st.ListSubscribers()
-        if err == nil && len(subs) > 0 {
-            for _, s := range subs {
-                _ = telegram.SendMessageTo(s.ChatID, msg)
-            }
-            return nil
-        }
-    }
-    return telegram.SendMessage(msg)
+	if st != nil {
+		subs, err := st.ListSubscribers()
+		if err == nil && len(subs) > 0 {
+			for _, s := range subs {
+				_ = telegram.SendMessageTo(s.ChatID, msg)
+			}
+			return nil
+		}
+	}
+	return telegram.SendMessage(msg)
 }
-

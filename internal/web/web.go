@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AlexYaroshenko/montblanc/internal/parser"
 	"github.com/AlexYaroshenko/montblanc/internal/i18n"
+	"github.com/AlexYaroshenko/montblanc/internal/parser"
 	"github.com/AlexYaroshenko/montblanc/internal/store"
 	"github.com/AlexYaroshenko/montblanc/internal/telegram"
 )
@@ -29,9 +29,9 @@ var (
 )
 
 func StartServer() {
-    http.HandleFunc("/", handleHome)
-    http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
-    http.HandleFunc("/subscribe", handleSubscribe)
+	http.HandleFunc("/", handleHome)
+	http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
+	http.HandleFunc("/subscribe", handleSubscribe)
 	http.HandleFunc("/status", handleStatus)
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -95,17 +95,17 @@ func UpdateState(refuges []parser.Refuge, lastCheck time.Time) {
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
-    lang := i18n.DetectLang(r)
-    // Copy state under lock into a lightweight view model (no mutex)
-    state.mu.RLock()
-    view := struct {
-        Refuges   []parser.Refuge
-        LastCheck time.Time
-    }{
-        Refuges:   state.Refuges,
-        LastCheck: state.LastCheck,
-    }
-    state.mu.RUnlock()
+	lang := i18n.DetectLang(r)
+	// Copy state under lock into a lightweight view model (no mutex)
+	state.mu.RLock()
+	view := struct {
+		Refuges   []parser.Refuge
+		LastCheck time.Time
+	}{
+		Refuges:   state.Refuges,
+		LastCheck: state.LastCheck,
+	}
+	state.mu.RUnlock()
 
 	tmpl := `
 <!DOCTYPE html>
@@ -263,15 +263,15 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 </body>
 </html>`
 
-    t, err := template.New("home").Funcs(template.FuncMap{
-        "T": func(key string) string { return i18n.T(lang, key) },
-    }).Parse(tmpl)
+	t, err := template.New("home").Funcs(template.FuncMap{
+		"T": func(key string) string { return i18n.T(lang, key) },
+	}).Parse(tmpl)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-    if err := t.Execute(w, view); err != nil {
+	if err := t.Execute(w, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -311,66 +311,88 @@ func keepAlive() {
 
 // Telegram webhook: save chat and simple /start
 func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        return
-    }
-    var upd telegram.Update
-    if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
-    if upd.Message == nil || upd.Message.Chat == nil { w.WriteHeader(http.StatusOK); return }
-    chatID := fmt.Sprintf("%d", upd.Message.Chat.ID)
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var upd telegram.Update
+	if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if upd.Message == nil || upd.Message.Chat == nil {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	chatID := fmt.Sprintf("%d", upd.Message.Chat.ID)
 
-    // persist subscriber using Bolt as a local store
-    // On Render we'll swap to Postgres impl, interface stays the same
-    dbURL := os.Getenv("DATABASE_URL")
-    if dbURL == "" { log.Printf("store open error: DATABASE_URL is empty"); w.WriteHeader(http.StatusOK); return }
-    ps, err := store.OpenPostgres(context.Background(), dbURL)
-    if err != nil { log.Printf("store open error: %v", err); w.WriteHeader(http.StatusOK); return }
-    defer ps.Close()
+	// persist subscriber using Bolt as a local store
+	// On Render we'll swap to Postgres impl, interface stays the same
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Printf("store open error: DATABASE_URL is empty")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	ps, err := store.OpenPostgres(context.Background(), dbURL)
+	if err != nil {
+		log.Printf("store open error: %v", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	defer ps.Close()
 
-    lang := "en"
-    if upd.Message.From != nil && upd.Message.From.LanguageCode != "" { lang = upd.Message.From.LanguageCode }
-    _ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+	lang := "en"
+	if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
+		lang = upd.Message.From.LanguageCode
+	}
+	_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
 
-    // greet
-    _ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
-    w.WriteHeader(http.StatusOK)
+	// greet
+	_ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
+	w.WriteHeader(http.StatusOK)
 }
 
 // handleSubscribe saves subscriber and a single query
 func handleSubscribe(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
-        return
-    }
-    if err := r.ParseForm(); err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
-    chatID := r.FormValue("chat_id")
-    language := r.FormValue("language")
-    refuge := r.FormValue("refuge")
-    dateFrom := r.FormValue("date_from")
-    dateTo := r.FormValue("date_to")
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	chatID := r.FormValue("chat_id")
+	language := r.FormValue("language")
+	refuge := r.FormValue("refuge")
+	dateFrom := r.FormValue("date_from")
+	dateTo := r.FormValue("date_to")
 
-    if chatID == "" { http.Error(w, "chat_id required", http.StatusBadRequest); return }
+	if chatID == "" {
+		http.Error(w, "chat_id required", http.StatusBadRequest)
+		return
+	}
 
-    dbURL := os.Getenv("DATABASE_URL")
-    if dbURL == "" { http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError); return }
-    ps, err := store.OpenPostgres(context.Background(), dbURL)
-    if err != nil { http.Error(w, "store open error", http.StatusInternalServerError); return }
-    defer ps.Close()
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError)
+		return
+	}
+	ps, err := store.OpenPostgres(context.Background(), dbURL)
+	if err != nil {
+		http.Error(w, "store open error", http.StatusInternalServerError)
+		return
+	}
+	defer ps.Close()
 
-    if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
-        http.Error(w, "save subscriber error", http.StatusInternalServerError)
-        return
-    }
-    _, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
+	if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
+		http.Error(w, "save subscriber error", http.StatusInternalServerError)
+		return
+	}
+	_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
 
-    // optional: confirm in Telegram
-    _ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
-    http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
+	// optional: confirm in Telegram
+	_ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
+	http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
 }
