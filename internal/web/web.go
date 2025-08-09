@@ -520,7 +520,15 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
 		lang = upd.Message.From.LanguageCode
 	}
-	_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+    // enrich subscriber with username/first/last when available
+    usr := upd.Message.From
+    sub := store.Subscriber{ChatID: chatID, Language: lang}
+    if usr != nil {
+        sub.Username = usr.Username
+        sub.FirstName = usr.FirstName
+        sub.LastName = usr.LastName
+    }
+    _ = ps.UpsertSubscriber(sub)
 
 	// commands
 	txt := strings.TrimSpace(upd.Message.Text)
@@ -549,13 +557,13 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		linkTR := build("tr", lang)
 		linkDG := build("dg", lang)
 		linkAny := build("any", lang)
-        msg := strings.Builder{}
-        msg.WriteString("Please choose a refuge and date range:\n")
-        msg.WriteString("• Tête Rousse (current month): ")
+		msg := strings.Builder{}
+		msg.WriteString("Please choose a refuge and date range:\n")
+		msg.WriteString("• Tête Rousse (current month): ")
 		msg.WriteString(linkTR)
-        msg.WriteString("\n• du Goûter (current month): ")
+		msg.WriteString("\n• du Goûter (current month): ")
 		msg.WriteString(linkDG)
-        msg.WriteString("\n• Both / any (current month): ")
+		msg.WriteString("\n• Both / any (current month): ")
 		msg.WriteString(linkAny)
 		_ = telegram.SendMessageTo(chatID, msg.String())
 		w.WriteHeader(http.StatusOK)
@@ -603,10 +611,10 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 							dateTo = dateTo[:4] + "-" + dateTo[4:6] + "-" + dateTo[6:]
 						}
 
-						if lang == "" {
-							lang = "en"
-						}
-						_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang, IsActive: true})
+                        if lang == "" { lang = "en" }
+                        sub := store.Subscriber{ChatID: chatID, Language: lang, IsActive: true}
+                        if upd.Message.From != nil { sub.Username = upd.Message.From.Username; sub.FirstName = upd.Message.From.FirstName; sub.LastName = upd.Message.From.LastName }
+                        _ = ps.UpsertSubscriber(sub)
 						_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
 						_ = telegram.SendMessageTo(chatID, "✅ Subscription saved from web link. We'll notify you when matching dates appear.")
 						notifyAdmins(fmt.Sprintf("New subscription via deep link: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s", chatID, lang, refuge, dateFrom, dateTo))

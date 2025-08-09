@@ -8,6 +8,9 @@ import (
 // Subscriber represents a Telegram subscriber stored in the DB
 type Subscriber struct {
 	ChatID        string    `json:"chat_id"`
+    Username      string    `json:"username"`
+    FirstName     string    `json:"first_name"`
+    LastName      string    `json:"last_name"`
 	Language      string    `json:"language"`
 	Plan          string    `json:"plan"` // free, pro (future use)
 	CreatedAt     time.Time `json:"created_at"`
