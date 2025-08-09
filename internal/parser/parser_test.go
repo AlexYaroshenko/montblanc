@@ -1,8 +1,9 @@
 package parser
 
 import (
-	"os"
-	"testing"
+    "os"
+    "testing"
+    "time"
 )
 
 func TestParseRefugeContentFromFile(t *testing.T) {
@@ -15,7 +16,7 @@ func TestParseRefugeContentFromFile(t *testing.T) {
 		Name:  "Test Refuge",
 		Dates: make(map[string]string),
 	}
-	err = parseRefugeContent(string(content), &refuge)
+    err = parseRefugeContent(string(content), &refuge, time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("failed to parse response.html: %v", err)
 	}
@@ -165,7 +166,7 @@ func TestParseRefugeContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := parseRefugeContent(tt.html, &tt.refuge)
+            err := parseRefugeContent(tt.html, &tt.refuge, time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC))
 
 			// Check error
 			if (err != nil) != tt.wantErr {
