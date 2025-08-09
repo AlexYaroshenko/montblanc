@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -201,7 +202,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; }
         .lang { font-size: 14px; color: var(--muted); }
         .lang a { margin-left: 8px; }
-        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('/static/hero-montblanc.jpg'); background-size: cover; background-position: center; color: white; text-align: center; }
+        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('https://images.unsplash.com/photo-1520697222863-c66ef0b8d1b3?q=80&w=1600&auto=format&fit=crop'); background-size: cover; background-position: center; color: white; text-align: center; }
         .hero h1 { margin: 0 0 12px 0; font-size: 42px; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.45); }
         .hero p { margin: 0 auto 20px; max-width: 760px; color: #dfe7ff; }
         .cta { display: inline-flex; gap: 12px; }
@@ -262,11 +263,11 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         </div>
         <div class="hero-photos">
           <div class="photo">
-            <img src="/static/hero-montblanc.jpg" alt="Mont Blanc" loading="lazy" width="260" height="160"/>
+            <img src="https://images.unsplash.com/photo-1520697222863-c66ef0b8d1b3?auto=format&fit=crop&w=800&q=70" alt="Mont Blanc" loading="lazy" width="260" height="160" referrerpolicy="no-referrer"/>
             <div class="caption">Mont Blanc</div>
           </div>
           <div class="photo">
-            <img src="/static/refuge-gouter.jpg" alt="Refuge du Goûter" loading="lazy" width="260" height="160"/>
+            <img src="https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=70" alt="Refuge" loading="lazy" width="260" height="160" referrerpolicy="no-referrer"/>
             <div class="caption">Refuge du Goûter</div>
           </div>
         </div>
@@ -602,19 +603,28 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError)
 		return
 	}
-	// Build deep-link payload: r, f, t, l + HMAC
+	// Build deep-link payload (compact): code_f_t_l.sig (<=64 chars)
 	secret := os.Getenv("DEEP_LINK_SECRET")
 	if secret == "" {
 		secret = "dev"
 	}
-	// compact dates
+	// compact fields
 	f := strings.ReplaceAll(dateFrom, "-", "")
 	t := strings.ReplaceAll(dateTo, "-", "")
-	params := fmt.Sprintf("r=%s&f=%s&t=%s&l=%s", refuge, f, t, language)
+	code := "any"
+	switch refuge {
+	case "Tête Rousse":
+		code = "tr"
+	case "du Goûter":
+		code = "dg"
+	case "*":
+		code = "any"
+	}
+	data := fmt.Sprintf("%s_%s_%s_%s", code, f, t, language)
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(params))
-	sig := mac.Sum(nil)
-	payload := base64.RawURLEncoding.EncodeToString([]byte(params + "." + base64.RawURLEncoding.EncodeToString(sig)))
+	mac.Write([]byte(data))
+	sigHex := hex.EncodeToString(mac.Sum(nil)[:12])
+	payload := data + "." + sigHex
 	botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
 	if botUsername == "" {
 		botUsername = "montblanc_booking_bot"
