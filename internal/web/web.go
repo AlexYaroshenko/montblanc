@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"embed"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -520,111 +519,31 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
 		lang = upd.Message.From.LanguageCode
 	}
-    // enrich subscriber with username/first/last when available
-    usr := upd.Message.From
-    sub := store.Subscriber{ChatID: chatID, Language: lang}
-    if usr != nil {
-        sub.Username = usr.Username
-        sub.FirstName = usr.FirstName
-        sub.LastName = usr.LastName
-    }
-    _ = ps.UpsertSubscriber(sub)
+	// enrich subscriber with username/first/last when available
+	usr := upd.Message.From
+	sub := store.Subscriber{ChatID: chatID, Language: lang}
+	if usr != nil {
+		sub.Username = usr.Username
+		sub.FirstName = usr.FirstName
+		sub.LastName = usr.LastName
+	}
+	_ = ps.UpsertSubscriber(sub)
 
 	// commands
 	txt := strings.TrimSpace(upd.Message.Text)
-	if txt == "/start" {
-		// Offer mandatory selection via deep links (current month)
-		secret := os.Getenv("DEEP_LINK_SECRET")
-		if secret == "" {
-			secret = "dev"
-		}
-		botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
-		if botUsername == "" {
-			botUsername = "montblanc_booking_bot"
-		}
-		now := time.Now().UTC()
-		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-		monthEnd := monthStart.AddDate(0, 1, -1)
-		f := monthStart.Format("20060102")
-		t := monthEnd.Format("20060102")
-		build := func(code, lang string) string {
-			data := fmt.Sprintf("%s_%s_%s_%s", code, f, t, lang)
-			mac := hmac.New(sha256.New, []byte(secret))
-			mac.Write([]byte(data))
-			sigHex := hex.EncodeToString(mac.Sum(nil)[:12])
-			return fmt.Sprintf("https://t.me/%s?start=ps_%s.%s", botUsername, data, sigHex)
-		}
-		linkTR := build("tr", lang)
-		linkDG := build("dg", lang)
-		linkAny := build("any", lang)
-		msg := strings.Builder{}
-		msg.WriteString("Please choose a refuge and date range:\n")
-		msg.WriteString("• Tête Rousse (current month): ")
-		msg.WriteString(linkTR)
-		msg.WriteString("\n• du Goûter (current month): ")
-		msg.WriteString(linkDG)
-		msg.WriteString("\n• Both / any (current month): ")
-		msg.WriteString(linkAny)
-		_ = telegram.SendMessageTo(chatID, msg.String())
-		w.WriteHeader(http.StatusOK)
-		return
-	}
+    if txt == "/start" {
+        // Chat flow disabled: guide to website form only
+        base := os.Getenv("BASE_URL")
+        if base == "" { base = "https://montblanc.onrender.com" }
+        _ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
+        w.WriteHeader(http.StatusOK)
+        return
+    }
 	if strings.HasPrefix(txt, "/start ps_") {
-		// process deep link
-		payload := strings.TrimPrefix(txt, "/start ps_")
-		secret := os.Getenv("DEEP_LINK_SECRET")
-		if secret == "" {
-			secret = "dev"
-		}
-		// decode
-		raw, err := base64.RawURLEncoding.DecodeString(payload)
-		if err == nil {
-			parts := strings.SplitN(string(raw), ".", 2)
-			if len(parts) == 2 {
-				params := parts[0]
-				sigB64 := parts[1]
-				sig, err2 := base64.RawURLEncoding.DecodeString(sigB64)
-				if err2 == nil {
-					mac := hmac.New(sha256.New, []byte(secret))
-					mac.Write([]byte(params))
-					if hmac.Equal(mac.Sum(nil), sig) {
-						// parse params r=..&f=..&t=..&l=..
-						vals := map[string]string{}
-						for _, kv := range strings.Split(params, "&") {
-							if kv == "" {
-								continue
-							}
-							p := strings.SplitN(kv, "=", 2)
-							if len(p) == 2 {
-								vals[p[0]] = p[1]
-							}
-						}
-						refuge := vals["r"]
-						dateFrom := vals["f"]
-						dateTo := vals["t"]
-						lang := vals["l"]
-						// expand dates back to YYYY-MM-DD if present
-						if len(dateFrom) == 8 {
-							dateFrom = dateFrom[:4] + "-" + dateFrom[4:6] + "-" + dateFrom[6:]
-						}
-						if len(dateTo) == 8 {
-							dateTo = dateTo[:4] + "-" + dateTo[4:6] + "-" + dateTo[6:]
-						}
-
-                        if lang == "" { lang = "en" }
-                        sub := store.Subscriber{ChatID: chatID, Language: lang, IsActive: true}
-                        if upd.Message.From != nil { sub.Username = upd.Message.From.Username; sub.FirstName = upd.Message.From.FirstName; sub.LastName = upd.Message.From.LastName }
-                        _ = ps.UpsertSubscriber(sub)
-						_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
-						_ = telegram.SendMessageTo(chatID, "✅ Subscription saved from web link. We'll notify you when matching dates appear.")
-						notifyAdmins(fmt.Sprintf("New subscription via deep link: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s", chatID, lang, refuge, dateFrom, dateTo))
-						w.WriteHeader(http.StatusOK)
-						return
-					}
-				}
-			}
-		}
-		_ = telegram.SendMessageTo(chatID, "❌ Invalid or expired link. Please try again from the website.")
+        // Deep-link flow disabled
+        base := os.Getenv("BASE_URL")
+        if base == "" { base = "https://montblanc.onrender.com" }
+        _ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
