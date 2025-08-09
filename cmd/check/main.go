@@ -29,21 +29,21 @@ func main() {
 		log.Printf("Warning: Error loading .env file: %v", err)
 	}
 
-    // Require Google Analytics measurement ID
-    if os.Getenv("GA_MEASUREMENT_ID") == "" {
-        log.Fatal("GA_MEASUREMENT_ID is not set")
-    }
+	// Require Google Analytics measurement ID
+	if os.Getenv("GA_MEASUREMENT_ID") == "" {
+		log.Fatal("GA_MEASUREMENT_ID is not set")
+	}
 
-    // Rolling window: from today to two months ahead (fetch month views)
-    now := time.Now().UTC()
-    // Normalize to first day of current month
-    monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-    // Build list of 3 month anchors: current, +1, +2
-    monthAnchors := []time.Time{
-        monthStart,
-        monthStart.AddDate(0, 1, 0),
-        monthStart.AddDate(0, 2, 0),
-    }
+	// Rolling window: from today to two months ahead (fetch month views)
+	now := time.Now().UTC()
+	// Normalize to first day of current month
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	// Build list of 3 month anchors: current, +1, +2
+	monthAnchors := []time.Time{
+		monthStart,
+		monthStart.AddDate(0, 1, 0),
+		monthStart.AddDate(0, 2, 0),
+	}
 
 	// Open store: require Postgres
 	dbURL := os.Getenv("DATABASE_URL")
@@ -60,8 +60,8 @@ func main() {
 	notifiedDates := make(map[string]bool)
 
 	// Perform initial availability check
-    log.Printf("Performing initial availability check for 3-month window starting %s...", monthStart.Format("2006-01-02"))
-    refuges, err := fetchRefugesWindow(refugeURL, monthAnchors)
+	log.Printf("Performing initial availability check for 3-month window starting %s...", monthStart.Format("2006-01-02"))
+	refuges, err := fetchRefugesWindow(refugeURL, monthAnchors)
 	if err != nil {
 		log.Printf("Warning: Initial availability check failed: %v", err)
 	}
@@ -79,8 +79,8 @@ func main() {
 	}
 
 	// Send start message
-    windowEnd := monthStart.AddDate(0, 3, -1)
-    startMsg := fmt.Sprintf("🚀 Monitoring started for window %s – %s\nCheck interval: %v", monthStart.Format("2006-01-02"), windowEnd.Format("2006-01-02"), checkInterval)
+	windowEnd := monthStart.AddDate(0, 3, -1)
+	startMsg := fmt.Sprintf("🚀 Monitoring started for window %s – %s\nCheck interval: %v", monthStart.Format("2006-01-02"), windowEnd.Format("2006-01-02"), checkInterval)
 	if err := sendToSubscribersOrEnv(st, startMsg); err != nil {
 		log.Printf("Warning: Failed to send start message: %v", err)
 	}
@@ -112,12 +112,12 @@ func main() {
 		select {
 		case <-ticker.C:
 			log.Printf("🔔 Ticker triggered at %v - Starting availability check...", time.Now().Format("2006-01-02 15:04:05"))
-            // refresh month anchors on each tick to keep rolling window
-            now = time.Now().UTC()
-            monthStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-            monthAnchors = []time.Time{monthStart, monthStart.AddDate(0, 1, 0), monthStart.AddDate(0, 2, 0)}
+			// refresh month anchors on each tick to keep rolling window
+			now = time.Now().UTC()
+			monthStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+			monthAnchors = []time.Time{monthStart, monthStart.AddDate(0, 1, 0), monthStart.AddDate(0, 2, 0)}
 
-            refuges, err := fetchRefugesWindow(refugeURL, monthAnchors)
+			refuges, err := fetchRefugesWindow(refugeURL, monthAnchors)
 			if err != nil {
 				log.Printf("❌ Failed to check availability: %v", err)
 				continue
@@ -201,7 +201,7 @@ func main() {
 
 		case <-sigChan:
 			log.Println("🛑 Received shutdown signal, stopping...")
-            shutdownMsg := fmt.Sprintf("🛑 Monitoring stopped")
+			shutdownMsg := fmt.Sprintf("🛑 Monitoring stopped")
 			if err := sendToSubscribersOrEnv(st, shutdownMsg); err != nil {
 				log.Printf("❌ Failed to send shutdown message: %v", err)
 			}
@@ -212,31 +212,35 @@ func main() {
 
 // fetchRefugesWindow fetches availability for multiple month anchors and merges the results
 func fetchRefugesWindow(refugeURL string, monthAnchors []time.Time) ([]parser.Refuge, error) {
-    merged := make(map[string]parser.Refuge)
-    for _, anchor := range monthAnchors {
-        res, err := parser.ParseRefugeAvailability(refugeURL, anchor)
-        if err != nil {
-            return nil, err
-        }
-        for _, rf := range res {
-            if existing, ok := merged[rf.Name]; ok {
-                // merge dates
-                for d, s := range rf.Dates {
-                    existing.Dates[d] = s
-                }
-                merged[rf.Name] = existing
-            } else {
-                // copy to avoid aliasing
-                copyDates := make(map[string]string, len(rf.Dates))
-                for d, s := range rf.Dates { copyDates[d] = s }
-                merged[rf.Name] = parser.Refuge{Name: rf.Name, Dates: copyDates}
-            }
-        }
-    }
-    // flatten
-    out := make([]parser.Refuge, 0, len(merged))
-    for _, rf := range merged { out = append(out, rf) }
-    return out, nil
+	merged := make(map[string]parser.Refuge)
+	for _, anchor := range monthAnchors {
+		res, err := parser.ParseRefugeAvailability(refugeURL, anchor)
+		if err != nil {
+			return nil, err
+		}
+		for _, rf := range res {
+			if existing, ok := merged[rf.Name]; ok {
+				// merge dates
+				for d, s := range rf.Dates {
+					existing.Dates[d] = s
+				}
+				merged[rf.Name] = existing
+			} else {
+				// copy to avoid aliasing
+				copyDates := make(map[string]string, len(rf.Dates))
+				for d, s := range rf.Dates {
+					copyDates[d] = s
+				}
+				merged[rf.Name] = parser.Refuge{Name: rf.Name, Dates: copyDates}
+			}
+		}
+	}
+	// flatten
+	out := make([]parser.Refuge, 0, len(merged))
+	for _, rf := range merged {
+		out = append(out, rf)
+	}
+	return out, nil
 }
 
 // sendToSubscribersOrEnv sends to DB/bolt subscribers if available; otherwise falls back to TELEGRAM_CHAT_IDS
