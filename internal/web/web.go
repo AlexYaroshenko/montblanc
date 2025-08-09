@@ -1,10 +1,12 @@
 package web
 
 import (
+    "embed"
 	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
+    "io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -30,10 +32,17 @@ var (
 	}
 )
 
+//go:embed static/*
+var embeddedStaticFS embed.FS
+
 func StartServer() {
-	// static files
-	fs := http.FileServer(http.Dir("internal/web/static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
+    // static files (embedded)
+    sub, err := fs.Sub(embeddedStaticFS, "static")
+    if err == nil {
+        http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(sub))))
+    } else {
+        log.Printf("❌ static fs error: %v", err)
+    }
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
 	http.HandleFunc("/subscribe", handleSubscribe)
