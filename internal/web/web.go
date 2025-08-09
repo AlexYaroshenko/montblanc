@@ -30,9 +30,9 @@ var (
 )
 
 func StartServer() {
-    // static files
-    fs := http.FileServer(http.Dir("internal/web/static"))
-    http.Handle("/static/", http.StripPrefix("/static/", fs))
+	// static files
+	fs := http.FileServer(http.Dir("internal/web/static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
 	http.HandleFunc("/subscribe", handleSubscribe)
