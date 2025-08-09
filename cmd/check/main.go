@@ -29,6 +29,11 @@ func main() {
 		log.Printf("Warning: Error loading .env file: %v", err)
 	}
 
+    // Require Google Analytics measurement ID
+    if os.Getenv("GA_MEASUREMENT_ID") == "" {
+        log.Fatal("GA_MEASUREMENT_ID is not set")
+    }
+
     // Rolling window: from today to two months ahead (fetch month views)
     now := time.Now().UTC()
     // Normalize to first day of current month
