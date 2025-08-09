@@ -272,6 +272,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .hero-photos .photo { display: flex; flex-direction: column; align-items: center; }
         .hero-photos img { width: 260px; height: 160px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); box-shadow: 0 6px 20px rgba(0,0,0,.35); }
         .hero-photos .caption { font-size: 12px; color: #dfe7ff; margin-top: 6px; }
+        .footer { padding: 24px; border-top: 1px solid #e5e7eb; color: var(--muted); font-size: 14px; text-align: center; }
+        .footer a { color: var(--brand); }
     </style>
     {{if .GAID}}
     <!-- Google tag (gtag.js) -->
@@ -432,7 +434,12 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
           </div>
         </div>
       </div>
-    </section>
+</section>
+    <footer style="padding:24px;border-top:1px solid #e5e7eb;color:#666;font-size:14px;text-align:center;">
+      <div class="container">
+        Contact: <a href="mailto:felex@cooldev.biz" style="color:#0f62fe;">felex@cooldev.biz</a>
+      </div>
+    </footer>
 </body>
 </html>`
 
@@ -515,35 +522,94 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ps.Close()
 
-	lang := "en"
-	if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
-		lang = upd.Message.From.LanguageCode
-	}
-	// enrich subscriber with username/first/last when available
-	usr := upd.Message.From
-	sub := store.Subscriber{ChatID: chatID, Language: lang}
-	if usr != nil {
-		sub.Username = usr.Username
-		sub.FirstName = usr.FirstName
-		sub.LastName = usr.LastName
-	}
-	_ = ps.UpsertSubscriber(sub)
+	// language of user if needed later
+	// lang := "en"
+	// if upd.Message.From != nil && upd.Message.From.LanguageCode != "" { lang = upd.Message.From.LanguageCode }
+	// don't auto-subscribe on incoming message; only via website flow
 
 	// commands
 	txt := strings.TrimSpace(upd.Message.Text)
-    if txt == "/start" {
-        // Chat flow disabled: guide to website form only
-        base := os.Getenv("BASE_URL")
-        if base == "" { base = "https://montblanc.onrender.com" }
-        _ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
-        w.WriteHeader(http.StatusOK)
-        return
-    }
+	if txt == "/start" {
+		// Chat flow disabled: guide to website form only
+		base := os.Getenv("BASE_URL")
+		if base == "" {
+			base = "https://montblanc.onrender.com"
+		}
+		_ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if strings.HasPrefix(txt, "/start ps_") {
-        // Deep-link flow disabled
-        base := os.Getenv("BASE_URL")
-        if base == "" { base = "https://montblanc.onrender.com" }
-        _ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
+		// Process deep link payload: code_from_to_lang.sighex
+		payload := strings.TrimPrefix(txt, "/start ps_")
+		// Log and notify admins about deep link visit
+		uname := ""
+		if upd.Message.From != nil {
+			uname = upd.Message.From.Username
+		}
+		log.Printf("🔗 Deep link received: chat_id=%s username=@%s payload=%s", chatID, uname, payload)
+		notifyAdmins(fmt.Sprintf("🔗 Deep link opened: chat_id=%s @%s", chatID, uname))
+		secret := os.Getenv("DEEP_LINK_SECRET")
+		if secret == "" {
+			secret = "dev"
+		}
+		parts := strings.SplitN(payload, ".", 2)
+		if len(parts) != 2 {
+			_ = telegram.SendMessageTo(chatID, "Invalid link. Please use the website form.")
+			notifyAdmins(fmt.Sprintf("❌ Deep link invalid format from chat_id=%s payload=%s", chatID, payload))
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		data, sigHex := parts[0], parts[1]
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(data))
+		expected := hex.EncodeToString(mac.Sum(nil)[:12])
+		if sigHex != expected {
+			_ = telegram.SendMessageTo(chatID, "Invalid or expired link. Please try again from the website.")
+			notifyAdmins(fmt.Sprintf("❌ Deep link signature mismatch chat_id=%s payload=%s", chatID, payload))
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		fields := strings.SplitN(data, "_", 4)
+		if len(fields) != 4 {
+			_ = telegram.SendMessageTo(chatID, "Invalid link format. Please try again from the website.")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		code, df, dt, lang2 := fields[0], fields[1], fields[2], fields[3]
+		if lang2 == "" {
+			lang2 = "en"
+		}
+		// require dates
+		if len(df) != 8 || len(dt) != 8 {
+			base := os.Getenv("BASE_URL")
+			if base == "" {
+				base = "https://montblanc.onrender.com"
+			}
+			_ = telegram.SendMessageTo(chatID, "Please pick dates on the website:\n"+base+"/#subscribe")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		dateFrom := df[:4] + "-" + df[4:6] + "-" + df[6:]
+		dateTo := dt[:4] + "-" + dt[4:6] + "-" + dt[6:]
+		refuge := "*"
+		if code == "tr" {
+			refuge = "Tête Rousse"
+		} else if code == "dg" {
+			refuge = "du Goûter"
+		}
+
+		// Save subscriber and query
+		sub := store.Subscriber{ChatID: chatID, Language: lang2, IsActive: true}
+		if upd.Message.From != nil {
+			sub.Username = upd.Message.From.Username
+			sub.FirstName = upd.Message.From.FirstName
+			sub.LastName = upd.Message.From.LastName
+		}
+		_ = ps.UpsertSubscriber(sub)
+		_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
+		_ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
+		notifyAdmins(fmt.Sprintf("✅ New subscription via deep link: chat_id=%s @%s, lang=%s, refuge=%s, from=%s, to=%s", chatID, uname, lang2, refuge, dateFrom, dateTo))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -563,10 +629,12 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// greet
-	_ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
-	// notify admins
-	notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s (webhook)", chatID, lang))
+	// any other text → instruct to use website (no subscription here)
+	base := os.Getenv("BASE_URL")
+	if base == "" {
+		base = "https://montblanc.onrender.com"
+	}
+	_ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
 	w.WriteHeader(http.StatusOK)
 }
 
