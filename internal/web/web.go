@@ -424,6 +424,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
     <footer style="padding:24px;border-top:1px solid #e5e7eb;color:#666;font-size:14px;text-align:center;">
       <div class="container">
         Contact: <a href="mailto:felex@cooldev.biz" style="color:#0f62fe;">felex@cooldev.biz</a>
+        <div style="margin-top:6px" class="muted">This is my hobby project and is still being tested.</div>
       </div>
     </footer>
 </body>
