@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -14,6 +16,8 @@ import (
 
 	"github.com/AlexYaroshenko/montblanc/internal/parser"
 	"github.com/AlexYaroshenko/montblanc/internal/i18n"
+	"github.com/AlexYaroshenko/montblanc/internal/store"
+	"github.com/AlexYaroshenko/montblanc/internal/telegram"
 )
 
 var (
@@ -25,7 +29,8 @@ var (
 )
 
 func StartServer() {
-	http.HandleFunc("/", handleHome)
+    http.HandleFunc("/", handleHome)
+    http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
 	http.HandleFunc("/status", handleStatus)
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -254,4 +259,33 @@ func keepAlive() {
 			log.Printf("❌ Keep-alive ping returned status: %d", resp.StatusCode)
 		}
 	}
+}
+
+// Telegram webhook: save chat and simple /start
+func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        return
+    }
+    var upd telegram.Update
+    if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    if upd.Message == nil || upd.Message.Chat == nil { w.WriteHeader(http.StatusOK); return }
+    chatID := fmt.Sprintf("%d", upd.Message.Chat.ID)
+
+    // persist subscriber using Bolt as a local store
+    // On Render we'll swap to Postgres impl, interface stays the same
+    bs, err := store.OpenBolt("data.db")
+    if err != nil { log.Printf("store open error: %v", err); w.WriteHeader(http.StatusOK); return }
+    defer bs.Close()
+
+    lang := "en"
+    if upd.Message.From != nil && upd.Message.From.LanguageCode != "" { lang = upd.Message.From.LanguageCode }
+    _ = bs.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+
+    // greet
+    _ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
+    w.WriteHeader(http.StatusOK)
 }

@@ -28,6 +28,25 @@ type Message struct {
 	ParseMode string `json:"parse_mode"`
 }
 
+// SendMessageTo sends a message to a specific chat id
+func SendMessageTo(chatID string, message string) error {
+    botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+    if botToken == "" { return fmt.Errorf("TELEGRAM_BOT_TOKEN not set") }
+    apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
+    resp, err := http.PostForm(apiURL, url.Values{
+        "chat_id":    {chatID},
+        "text":       {message},
+        "parse_mode": {"HTML"},
+    })
+    if err != nil { return err }
+    defer resp.Body.Close()
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("telegram send failed %d: %s", resp.StatusCode, string(body))
+    }
+    return nil
+}
+
 func SendMessage(message string) error {
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if botToken == "" {
