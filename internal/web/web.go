@@ -530,12 +530,25 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	// commands
 	txt := strings.TrimSpace(upd.Message.Text)
 	if txt == "/start" {
-		// Chat flow disabled: guide to website form only
-		base := os.Getenv("BASE_URL")
-		if base == "" {
-			base = "https://montblanc.onrender.com"
+		// Auto-subscribe for next 30 days for both refuges
+		lang2 := "en"
+		if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
+			lang2 = upd.Message.From.LanguageCode
 		}
-		_ = telegram.SendMessageTo(chatID, "Please subscribe on the website and pick dates:\n"+base+"/#subscribe")
+		sub := store.Subscriber{ChatID: chatID, Language: lang2, IsActive: true}
+		if upd.Message.From != nil {
+			sub.Username = upd.Message.From.Username
+			sub.FirstName = upd.Message.From.FirstName
+			sub.LastName = upd.Message.From.LastName
+		}
+		_ = ps.UpsertSubscriber(sub)
+
+		now := time.Now().UTC()
+		dateFrom := now.Format("2006-01-02")
+		dateTo := now.AddDate(0, 0, 30).Format("2006-01-02")
+		_, _ = ps.AddQuery(store.Query{ChatID: chatID, Refuge: "*", DateFrom: dateFrom, DateTo: dateTo})
+		_ = telegram.SendMessageTo(chatID, fmt.Sprintf("✅ Subscribed for next 30 days (both refuges): %s → %s", dateFrom, dateTo))
+		notifyAdmins(fmt.Sprintf("✅ New default /start subscription: chat_id=%s @%s, lang=%s, refuge=*, from=%s, to=%s", chatID, sub.Username, lang2, dateFrom, dateTo))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -710,7 +723,36 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	if botUsername == "" {
 		botUsername = "montblanc_booking_bot"
 	}
-	http.Redirect(w, r, fmt.Sprintf("https://t.me/%s?start=ps_%s", botUsername, payload), http.StatusSeeOther)
+	deepLinkWeb := fmt.Sprintf("https://t.me/%s?start=ps_%s", botUsername, payload)
+	deepLinkApp := fmt.Sprintf("tg://resolve?domain=%s&start=ps_%s", botUsername, payload)
+
+	// Render interstitial page with Open in Telegram, copyable command, and QR fallback
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	command := fmt.Sprintf("/start ps_%s", payload)
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Open in Telegram</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f8fb;color:#111}
+.wrap{max-width:720px;margin:0 auto;padding:24px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.btn{display:inline-block;background:#229ED9;color:#fff;text-decoration:none;padding:12px 16px;border-radius:8px;font-weight:700}
+.muted{color:#666}
+.code{display:flex;gap:8px;margin-top:12px}
+input.cmd{flex:1;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.small{font-size:13px}
+</style></head><body><div class="wrap">
+<h2>Almost done</h2>
+<div class="card">
+  <p>Open Telegram and press Start if asked, we will finalize your subscription automatically.</p>
+  <p><a class="btn" href="%s">Open in Telegram</a></p>
+  <p class="small muted">If the button above doesn't work, try this link: <a href="%s">%s</a></p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;"/>
+  <p class="muted">Or paste this command to the bot chat:</p>
+  <div class="code"><input class="cmd" id="cmd" value="%s" readonly><button onclick="navigator.clipboard.writeText(document.getElementById('cmd').value);this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)" class="btn" style="background:#0f62fe">Copy</button></div>
+  <p class="small muted" style="margin-top:8px">Bot: @%s</p>
+</div>
+</div></body></html>`, deepLinkApp, deepLinkWeb, deepLinkWeb, command, botUsername)
+	_, _ = w.Write([]byte(page))
 }
 
 // digitsOnly returns true if s contains only ASCII digits
