@@ -425,6 +425,13 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
       <div class="container">
         Contact: <a href="mailto:felex@cooldev.biz" style="color:#0f62fe;">felex@cooldev.biz</a>
         <div style="margin-top:6px" class="muted">This is my hobby project and is still being tested.</div>
+        <div style="margin-top:10px">
+          <form action="https://www.paypal.com/donate" method="post" target="_blank" rel="noopener">
+            <input type="hidden" name="hosted_button_id" value="5LMY6MTQLRAGN" />
+            <input type="image" src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_SM.gif" border="0" name="submit" title="PayPal - The safer, easier way to pay online!" alt="Donate with PayPal button" />
+            <img alt="" border="0" src="https://www.paypal.com/en_UA/i/scr/pixel.gif" width="1" height="1" />
+          </form>
+        </div>
       </div>
     </footer>
 </body>
