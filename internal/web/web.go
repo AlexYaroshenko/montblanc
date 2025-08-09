@@ -333,12 +333,13 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <h2>{{T "cta_subscribe"}}</h2>
         <div class="grid">
           <div class="card">
-            <p class="muted" style="margin:0 0 8px;">Рекомендуем: подпишитесь через Telegram в один клик — нажмите кнопку выше и отправьте /start. Если уже знаете свой Chat ID, можно заполнить форму ниже.</p>
+            <p class="muted" style="margin:0 0 8px;">{{T "subscribe_hint"}}</p>
             <form method="post" action="/subscribe">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div>
                   <label class="muted">{{T "chat_id"}}</label>
                   <input name="chat_id" required placeholder="123456789" pattern="[0-9]+" inputmode="numeric" title="Enter numeric Telegram Chat ID (use /id in bot)" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;" />
+                  <div class="muted" style="font-size:12px;margin-top:6px;">{{T "chat_id_hint"}} <a href="{{.BotLink}}" target="_blank" rel="noopener">{{T "chat_id_how"}}</a></div>
                 </div>
                 <div>
                   <label class="muted">{{T "language"}}</label>

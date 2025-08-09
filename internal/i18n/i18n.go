@@ -34,6 +34,9 @@ var supported = map[string]map[string]string{
         "sample_free_spots":  "Free spots",
         "sample_in":          "in",
         "try":                "Try",
+        "subscribe_hint":     "Recommended: subscribe via Telegram in one click — press the button above and send /start. If you already know your Chat ID, you can fill the form below.",
+        "chat_id_hint":       "Don't know your Chat ID?",
+        "chat_id_how":        "Open the bot and send /id",
 	},
 	"de": {
         "title":              "Hüttenverfügbarkeit",
@@ -62,6 +65,9 @@ var supported = map[string]map[string]string{
         "sample_free_spots":  "Freie Plätze",
         "sample_in":          "in",
         "try":                "Ausprobieren",
+        "subscribe_hint":     "Empfehlung: Abonniere via Telegram mit einem Klick – Button oben und /start senden. Wenn du deine Chat-ID kennst, fülle das Formular unten aus.",
+        "chat_id_hint":       "Kennst du deine Chat-ID nicht?",
+        "chat_id_how":        "Öffne den Bot und sende /id",
 	},
 	"fr": {
         "title":              "Disponibilité des refuges",
@@ -90,6 +96,9 @@ var supported = map[string]map[string]string{
         "sample_free_spots":  "Places libres",
         "sample_in":          "à",
         "try":                "Essayer",
+        "subscribe_hint":     "Recommandé : inscrivez-vous via Telegram en un clic — bouton ci-dessus puis /start. Si vous connaissez votre Chat ID, vous pouvez remplir le formulaire ci-dessous.",
+        "chat_id_hint":       "Vous ne connaissez pas votre Chat ID ?",
+        "chat_id_how":        "Ouvrez le bot et envoyez /id",
 	},
 	"es": {
         "title":              "Disponibilidad de refugios",
@@ -118,6 +127,9 @@ var supported = map[string]map[string]string{
         "sample_free_spots":  "Plazas libres",
         "sample_in":          "en",
         "try":                "Probar",
+        "subscribe_hint":     "Recomendado: suscríbete por Telegram en un clic — pulsa el botón de arriba y envía /start. Si ya conoces tu Chat ID, completa el formulario abajo.",
+        "chat_id_hint":       "¿No sabes tu Chat ID?",
+        "chat_id_how":        "Abre el bot y envía /id",
 	},
 	"it": {
         "title":              "Disponibilità dei rifugi",
@@ -146,6 +158,9 @@ var supported = map[string]map[string]string{
         "sample_free_spots":  "Posti liberi",
         "sample_in":          "a",
         "try":                "Provare",
+        "subscribe_hint":     "Consigliato: iscriviti via Telegram in un clic — premi il pulsante sopra e invia /start. Se conosci già il tuo Chat ID, compila il form qui sotto.",
+        "chat_id_hint":       "Non conosci il tuo Chat ID?",
+        "chat_id_how":        "Apri il bot e invia /id",
 	},
 }
 
