@@ -382,19 +382,10 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <h2>{{T "cta_subscribe"}}</h2>
         <div class="grid">
           <div class="card">
-            <p class="muted" style="margin:0 0 8px;">{{T "subscribe_hint"}}</p>
+            
             <form method="post" action="/subscribe">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <div>
-                  <label class="muted">{{T "language"}}</label>
-                  <select name="language" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;">
-                    <option value="en">EN</option>
-                    <option value="de">DE</option>
-                    <option value="fr">FR</option>
-                    <option value="es">ES</option>
-                    <option value="it">IT</option>
-                  </select>
-                </div>
+                
                 <div>
                   <label class="muted">{{T "refuge"}}</label>
                   <select name="refuge" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;">
@@ -416,7 +407,6 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                 <button class="btn primary" type="submit">{{T "submit"}}</button>
               </div>
             </form>
-            <p class="muted" style="margin-top:8px">Or start a chat with the Telegram bot and send /start.</p>
           </div>
         </div>
       </div>
@@ -659,7 +649,8 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	language := r.FormValue("language")
+	// language: take from detected UI language
+	language := i18n.DetectLang(r)
 	refuge := r.FormValue("refuge")
 	dateFrom := r.FormValue("date_from")
 	dateTo := r.FormValue("date_to")
