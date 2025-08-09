@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
-    "strings"
-    "sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -110,63 +110,63 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
 
-    // Build small table model for demo (earliest up to 3 dates across refuges)
-    datesSet := make(map[string]struct{})
-    for _, rf := range state.Refuges {
-        for d := range rf.Dates {
-            datesSet[d] = struct{}{}
-        }
-    }
-    allDates := make([]string, 0, len(datesSet))
-    for d := range datesSet {
-        allDates = append(allDates, d)
-    }
-    sort.Strings(allDates)
-    if len(allDates) > 3 {
-        allDates = allDates[:3]
-    }
-    tableHeaders := make([]string, len(allDates))
-    for i, d := range allDates {
-        if t, err := time.Parse("2006-01-02", d); err == nil {
-            tableHeaders[i] = t.Format("02 Jan")
-        } else {
-            tableHeaders[i] = d
-        }
-    }
-    type tableRow struct {
-        Name  string
-        Cells []string
-    }
-    rows := make([]tableRow, 0, len(state.Refuges))
-    for _, rf := range state.Refuges {
-        cells := make([]string, len(allDates))
-        for i, d := range allDates {
-            if s, ok := rf.Dates[d]; ok {
-                if s == "Full" {
-                    cells[i] = "—"
-                } else {
-                    cells[i] = s
-                }
-            } else {
-                cells[i] = ""
-            }
-        }
-        rows = append(rows, tableRow{Name: rf.Name, Cells: cells})
-    }
+	// Build small table model for demo (earliest up to 3 dates across refuges)
+	datesSet := make(map[string]struct{})
+	for _, rf := range state.Refuges {
+		for d := range rf.Dates {
+			datesSet[d] = struct{}{}
+		}
+	}
+	allDates := make([]string, 0, len(datesSet))
+	for d := range datesSet {
+		allDates = append(allDates, d)
+	}
+	sort.Strings(allDates)
+	if len(allDates) > 3 {
+		allDates = allDates[:3]
+	}
+	tableHeaders := make([]string, len(allDates))
+	for i, d := range allDates {
+		if t, err := time.Parse("2006-01-02", d); err == nil {
+			tableHeaders[i] = t.Format("02 Jan")
+		} else {
+			tableHeaders[i] = d
+		}
+	}
+	type tableRow struct {
+		Name  string
+		Cells []string
+	}
+	rows := make([]tableRow, 0, len(state.Refuges))
+	for _, rf := range state.Refuges {
+		cells := make([]string, len(allDates))
+		for i, d := range allDates {
+			if s, ok := rf.Dates[d]; ok {
+				if s == "Full" {
+					cells[i] = "—"
+				} else {
+					cells[i] = s
+				}
+			} else {
+				cells[i] = ""
+			}
+		}
+		rows = append(rows, tableRow{Name: rf.Name, Cells: cells})
+	}
 
-    view := struct {
-        Refuges      []parser.Refuge
-        LastCheck    time.Time
-        BotLink      string
-        TableHeaders []string
-        Rows         []tableRow
-    }{
-        Refuges:      state.Refuges,
-        LastCheck:    state.LastCheck,
-        BotLink:      botLink,
-        TableHeaders: tableHeaders,
-        Rows:         rows,
-    }
+	view := struct {
+		Refuges      []parser.Refuge
+		LastCheck    time.Time
+		BotLink      string
+		TableHeaders []string
+		Rows         []tableRow
+	}{
+		Refuges:      state.Refuges,
+		LastCheck:    state.LastCheck,
+		BotLink:      botLink,
+		TableHeaders: tableHeaders,
+		Rows:         rows,
+	}
 	state.mu.RUnlock()
 
 	tmpl := `
