@@ -527,9 +527,13 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	if txt == "/start" {
 		// Offer mandatory selection via deep links (current month)
 		secret := os.Getenv("DEEP_LINK_SECRET")
-		if secret == "" { secret = "dev" }
+		if secret == "" {
+			secret = "dev"
+		}
 		botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
-		if botUsername == "" { botUsername = "montblanc_booking_bot" }
+		if botUsername == "" {
+			botUsername = "montblanc_booking_bot"
+		}
 		now := time.Now().UTC()
 		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 		monthEnd := monthStart.AddDate(0, 1, -1)
@@ -545,13 +549,13 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		linkTR := build("tr", lang)
 		linkDG := build("dg", lang)
 		linkAny := build("any", lang)
-		msg := strings.Builder{}
-		msg.WriteString("Пожалуйста, выберите приют и диапазон дат:\n")
-		msg.WriteString("• Tête Rousse (текущий месяц): ")
+        msg := strings.Builder{}
+        msg.WriteString("Please choose a refuge and date range:\n")
+        msg.WriteString("• Tête Rousse (current month): ")
 		msg.WriteString(linkTR)
-		msg.WriteString("\n• du Goûter (текущий месяц): ")
+        msg.WriteString("\n• du Goûter (current month): ")
 		msg.WriteString(linkDG)
-		msg.WriteString("\n• Оба / любой (текущий месяц): ")
+        msg.WriteString("\n• Both / any (current month): ")
 		msg.WriteString(linkAny)
 		_ = telegram.SendMessageTo(chatID, msg.String())
 		w.WriteHeader(http.StatusOK)
