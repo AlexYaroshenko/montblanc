@@ -1,7 +1,7 @@
 package parser
 
 import (
-    "errors"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -156,10 +156,10 @@ func parseRefugeContent(content string, refuge *Refuge, anchor time.Time) error 
 		return fmt.Errorf("failed to parse HTML: %v", err)
 	}
 
-    // Detect login-required page
-    if strings.Contains(content, "My email") {
-        return ErrReauthNeeded
-    }
+	// Detect login-required page
+	if strings.Contains(content, "My email") {
+		return ErrReauthNeeded
+	}
 
 	// if content contains "Your Rank in the waiting room"
 	// try again in 1 minute with a new API call
