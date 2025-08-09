@@ -196,16 +196,20 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		bestDate   string
 		bestPlaces string
 	)
-    // Build a map to check preference quickly
+	// Build a map to check preference quickly
 	prefIndex := map[string]int{"Tête Rousse": 0, "du Goûter": 1}
 	bestScore := 999
 	for _, rf := range view.Refuges {
 		for d, s := range rf.Dates {
-			if s == "Full" { continue }
+			if s == "Full" {
+				continue
+			}
 			// score by preference and date
 			dateScore := d
 			p := 10
-			if idx, ok := prefIndex[rf.Name]; ok { p = idx }
+			if idx, ok := prefIndex[rf.Name]; ok {
+				p = idx
+			}
 			scoreStr := fmt.Sprintf("%02d-%s", p, dateScore)
 			// lexicographically smaller is better
 			if scoreStr < fmt.Sprintf("%02d-%s", bestScore, bestDate) {
@@ -520,6 +524,39 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// commands
 	txt := strings.TrimSpace(upd.Message.Text)
+	if txt == "/start" {
+		// Offer mandatory selection via deep links (current month)
+		secret := os.Getenv("DEEP_LINK_SECRET")
+		if secret == "" { secret = "dev" }
+		botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
+		if botUsername == "" { botUsername = "montblanc_booking_bot" }
+		now := time.Now().UTC()
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		monthEnd := monthStart.AddDate(0, 1, -1)
+		f := monthStart.Format("20060102")
+		t := monthEnd.Format("20060102")
+		build := func(code, lang string) string {
+			data := fmt.Sprintf("%s_%s_%s_%s", code, f, t, lang)
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write([]byte(data))
+			sigHex := hex.EncodeToString(mac.Sum(nil)[:12])
+			return fmt.Sprintf("https://t.me/%s?start=ps_%s.%s", botUsername, data, sigHex)
+		}
+		linkTR := build("tr", lang)
+		linkDG := build("dg", lang)
+		linkAny := build("any", lang)
+		msg := strings.Builder{}
+		msg.WriteString("Пожалуйста, выберите приют и диапазон дат:\n")
+		msg.WriteString("• Tête Rousse (текущий месяц): ")
+		msg.WriteString(linkTR)
+		msg.WriteString("\n• du Goûter (текущий месяц): ")
+		msg.WriteString(linkDG)
+		msg.WriteString("\n• Оба / любой (текущий месяц): ")
+		msg.WriteString(linkAny)
+		_ = telegram.SendMessageTo(chatID, msg.String())
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if strings.HasPrefix(txt, "/start ps_") {
 		// process deep link
 		payload := strings.TrimPrefix(txt, "/start ps_")
