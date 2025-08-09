@@ -10,7 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-    "strings"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -30,6 +30,9 @@ var (
 )
 
 func StartServer() {
+    // static files
+    fs := http.FileServer(http.Dir("internal/web/static"))
+    http.Handle("/static/", http.StripPrefix("/static/", fs))
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
 	http.HandleFunc("/subscribe", handleSubscribe)
@@ -99,22 +102,22 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	lang := i18n.DetectLang(r)
 	// Copy state under lock into a lightweight view model (no mutex)
 	state.mu.RLock()
-    // Build bot deep link
-    botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
-    if botUsername == "" {
-        botUsername = "your_bot_username"
-    }
-    botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
+	// Build bot deep link
+	botUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
+	if botUsername == "" {
+		botUsername = "montblanc_booking_bot"
+	}
+	botLink := fmt.Sprintf("https://t.me/%s?start=subscribe", botUsername)
 
-    view := struct {
-        Refuges   []parser.Refuge
-        LastCheck time.Time
-        BotLink   string
-    }{
-        Refuges:   state.Refuges,
-        LastCheck: state.LastCheck,
-        BotLink:   botLink,
-    }
+	view := struct {
+		Refuges   []parser.Refuge
+		LastCheck time.Time
+		BotLink   string
+	}{
+		Refuges:   state.Refuges,
+		LastCheck: state.LastCheck,
+		BotLink:   botLink,
+	}
 	state.mu.RUnlock()
 
 	tmpl := `
@@ -133,8 +136,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; }
         .lang { font-size: 14px; color: var(--muted); }
         .lang a { margin-left: 8px; }
-        .hero { position: relative; padding: 80px 24px; background: linear-gradient(180deg, rgba(6,16,36,.85), rgba(6,16,36,.85)), url('https://images.unsplash.com/photo-1520697222863-c66ef0b8d1b3?q=80&w=1600&auto=format&fit=crop'); background-size: cover; background-position: center; color: white; text-align: center; }
-        .hero h1 { margin: 0 0 12px 0; font-size: 36px; letter-spacing: .2px; }
+        .hero { position: relative; padding: 100px 24px; background: linear-gradient(180deg, rgba(6,16,36,.80), rgba(6,16,36,.80)), url('/static/hero-montblanc.jpg'); background-size: cover; background-position: center; color: white; text-align: center; }
+        .hero h1 { margin: 0 0 12px 0; font-size: 42px; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.45); }
         .hero p { margin: 0 auto 20px; max-width: 760px; color: #dfe7ff; }
         .cta { display: inline-flex; gap: 12px; }
         .btn { display: inline-block; padding: 12px 18px; border-radius: 8px; font-weight: 600; }
@@ -184,11 +187,11 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         </div>
         <div class="hero-photos">
           <div class="photo">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/5/5d/Mont_Blanc_from_Aiguille_du_Midi.jpg" alt="Mont Blanc" loading="lazy" />
+            <img src="/static/hero-montblanc.jpg" alt="Mont Blanc" loading="lazy" width="260" height="160"/>
             <div class="caption">Mont Blanc</div>
           </div>
           <div class="photo">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/2/23/Refuge_du_Go%C3%BBter_3835m.jpg" alt="Refuge du Goûter" loading="lazy" />
+            <img src="/static/refuge-gouter.jpg" alt="Refuge du Goûter" loading="lazy" width="260" height="160"/>
             <div class="caption">Refuge du Goûter</div>
           </div>
         </div>
@@ -344,7 +347,7 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-    var upd telegram.Update
+	var upd telegram.Update
 	if err := json.NewDecoder(r.Body).Decode(&upd); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -375,24 +378,30 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	if upd.Message.From != nil && upd.Message.From.LanguageCode != "" {
 		lang = upd.Message.From.LanguageCode
 	}
-    _ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
+	_ = ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: lang})
 
-    // commands
-    txt := strings.TrimSpace(upd.Message.Text)
-    if txt == "/id" { _ = telegram.SendMessageTo(chatID, "Your Chat ID: "+chatID); w.WriteHeader(http.StatusOK); return }
-    if txt == "/subscribers" && isAdmin(chatID) {
-        subs, err := ps.ListSubscribers()
-        if err != nil { _ = telegram.SendMessageTo(chatID, "Error fetching subscribers") } else {
-            sendSubscribersList(chatID, subs)
-        }
-        w.WriteHeader(http.StatusOK)
-        return
-    }
+	// commands
+	txt := strings.TrimSpace(upd.Message.Text)
+	if txt == "/id" {
+		_ = telegram.SendMessageTo(chatID, "Your Chat ID: "+chatID)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if txt == "/subscribers" && isAdmin(chatID) {
+		subs, err := ps.ListSubscribers()
+		if err != nil {
+			_ = telegram.SendMessageTo(chatID, "Error fetching subscribers")
+		} else {
+			sendSubscribersList(chatID, subs)
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	// greet
 	_ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
-    // notify admins
-    notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s (webhook)", chatID, lang))
+	// notify admins
+	notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s (webhook)", chatID, lang))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -406,50 +415,50 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-    chatID := r.FormValue("chat_id")
-    language := r.FormValue("language")
-    refuge := r.FormValue("refuge")
-    dateFrom := r.FormValue("date_from")
-    dateTo := r.FormValue("date_to")
+	chatID := r.FormValue("chat_id")
+	language := r.FormValue("language")
+	refuge := r.FormValue("refuge")
+	dateFrom := r.FormValue("date_from")
+	dateTo := r.FormValue("date_to")
 
 	if chatID == "" {
 		http.Error(w, "chat_id required", http.StatusBadRequest)
 		return
 	}
 
-    // server-side validation
-    // chatID must be numeric
-    if !digitsOnly(chatID) {
-        http.Error(w, "chat_id must be numeric", http.StatusBadRequest)
-        return
-    }
-    // language allowlist
-    allowedLang := map[string]bool{"en": true, "de": true, "fr": true, "es": true, "it": true}
-    if language != "" && !allowedLang[language] {
-        http.Error(w, "unsupported language", http.StatusBadRequest)
-        return
-    }
-    // refuge allowlist (currently only 2 supported plus any)
-    allowedRefuge := map[string]bool{"*": true, "Tête Rousse": true, "du Goûter": true}
-    if refuge != "" && !allowedRefuge[refuge] {
-        http.Error(w, "unsupported refuge", http.StatusBadRequest)
-        return
-    }
-    // date range validation if both provided
-    if dateFrom != "" && dateTo != "" {
-        df, err1 := time.Parse("2006-01-02", dateFrom)
-        dt, err2 := time.Parse("2006-01-02", dateTo)
-        if err1 != nil || err2 != nil {
-            http.Error(w, "invalid date format (expected YYYY-MM-DD)", http.StatusBadRequest)
-            return
-        }
-        if df.After(dt) {
-            http.Error(w, "date_from must be before or equal to date_to", http.StatusBadRequest)
-            return
-        }
-    }
+	// server-side validation
+	// chatID must be numeric
+	if !digitsOnly(chatID) {
+		http.Error(w, "chat_id must be numeric", http.StatusBadRequest)
+		return
+	}
+	// language allowlist
+	allowedLang := map[string]bool{"en": true, "de": true, "fr": true, "es": true, "it": true}
+	if language != "" && !allowedLang[language] {
+		http.Error(w, "unsupported language", http.StatusBadRequest)
+		return
+	}
+	// refuge allowlist (currently only 2 supported plus any)
+	allowedRefuge := map[string]bool{"*": true, "Tête Rousse": true, "du Goûter": true}
+	if refuge != "" && !allowedRefuge[refuge] {
+		http.Error(w, "unsupported refuge", http.StatusBadRequest)
+		return
+	}
+	// date range validation if both provided
+	if dateFrom != "" && dateTo != "" {
+		df, err1 := time.Parse("2006-01-02", dateFrom)
+		dt, err2 := time.Parse("2006-01-02", dateTo)
+		if err1 != nil || err2 != nil {
+			http.Error(w, "invalid date format (expected YYYY-MM-DD)", http.StatusBadRequest)
+			return
+		}
+		if df.After(dt) {
+			http.Error(w, "date_from must be before or equal to date_to", http.StatusBadRequest)
+			return
+		}
+	}
 
-    dbURL := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		http.Error(w, "DATABASE_URL is empty", http.StatusInternalServerError)
 		return
@@ -461,7 +470,7 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ps.Close()
 
-    if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
+	if err := ps.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
 		http.Error(w, "save subscriber error", http.StatusInternalServerError)
 		return
 	}
@@ -469,56 +478,71 @@ func handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// optional: confirm in Telegram
 	_ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
-    // notify admins
-    notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s (web form)", chatID, language, refuge, dateFrom, dateTo))
+	// notify admins
+	notifyAdmins(fmt.Sprintf("New subscription: chat_id=%s, lang=%s, refuge=%s, from=%s, to=%s (web form)", chatID, language, refuge, dateFrom, dateTo))
 	http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
 }
 
 // digitsOnly returns true if s contains only ASCII digits
 func digitsOnly(s string) bool {
-    if s == "" { return false }
-    for _, r := range s {
-        if r < '0' || r > '9' { return false }
-    }
-    return true
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isAdmin checks if chatID present in TELEGRAM_CHAT_IDS env (admin list)
 func isAdmin(chatID string) bool {
-    ids := os.Getenv("TELEGRAM_CHAT_IDS")
-    if ids == "" { return false }
-    for _, id := range telegram.ParseChatIDs(ids) {
-        if id == chatID { return true }
-    }
-    return false
+	ids := os.Getenv("TELEGRAM_CHAT_IDS")
+	if ids == "" {
+		return false
+	}
+	for _, id := range telegram.ParseChatIDs(ids) {
+		if id == chatID {
+			return true
+		}
+	}
+	return false
 }
 
 // notifyAdmins sends a message to all admin chat ids from TELEGRAM_CHAT_IDS
 func notifyAdmins(message string) {
-    ids := os.Getenv("TELEGRAM_CHAT_IDS")
-    if ids == "" { return }
-    for _, id := range telegram.ParseChatIDs(ids) {
-        _ = telegram.SendMessageTo(id, message)
-    }
+	ids := os.Getenv("TELEGRAM_CHAT_IDS")
+	if ids == "" {
+		return
+	}
+	for _, id := range telegram.ParseChatIDs(ids) {
+		_ = telegram.SendMessageTo(id, message)
+	}
 }
 
 // sendSubscribersList sends the list to one chat, chunked to avoid message limits
 func sendSubscribersList(chatID string, subs []store.Subscriber) {
-    const chunkSize = 50
-    total := len(subs)
-    if total == 0 { _ = telegram.SendMessageTo(chatID, "No subscribers"); return }
-    // Build lines
-    lines := make([]string, 0, total+1)
-    header := fmt.Sprintf("Subscribers (%d):", total)
-    lines = append(lines, header)
-    for _, s := range subs {
-        line := fmt.Sprintf("- %s (lang=%s, plan=%s, active=%t)", s.ChatID, s.Language, s.Plan, s.IsActive)
-        lines = append(lines, line)
-    }
-    // send in chunks
-    for i := 0; i < len(lines); i += chunkSize {
-        end := i + chunkSize
-        if end > len(lines) { end = len(lines) }
-        _ = telegram.SendMessageTo(chatID, strings.Join(lines[i:end], "\n"))
-    }
+	const chunkSize = 50
+	total := len(subs)
+	if total == 0 {
+		_ = telegram.SendMessageTo(chatID, "No subscribers")
+		return
+	}
+	// Build lines
+	lines := make([]string, 0, total+1)
+	header := fmt.Sprintf("Subscribers (%d):", total)
+	lines = append(lines, header)
+	for _, s := range subs {
+		line := fmt.Sprintf("- %s (lang=%s, plan=%s, active=%t)", s.ChatID, s.Language, s.Plan, s.IsActive)
+		lines = append(lines, line)
+	}
+	// send in chunks
+	for i := 0; i < len(lines); i += chunkSize {
+		end := i + chunkSize
+		if end > len(lines) {
+			end = len(lines)
+		}
+		_ = telegram.SendMessageTo(chatID, strings.Join(lines[i:end], "\n"))
+	}
 }
