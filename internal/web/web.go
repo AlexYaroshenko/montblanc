@@ -31,6 +31,7 @@ var (
 func StartServer() {
     http.HandleFunc("/", handleHome)
     http.HandleFunc("/telegram/webhook", handleTelegramWebhook)
+    http.HandleFunc("/subscribe", handleSubscribe)
 	http.HandleFunc("/status", handleStatus)
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -207,8 +208,47 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
     <section id="subscribe" class="section">
       <div class="container">
         <h2>{{T "cta_subscribe"}}</h2>
-        <div class="card">
-          <p class="muted">Start a chat with the Telegram bot and send /start to subscribe.</p>
+        <div class="grid">
+          <div class="card">
+            <form method="post" action="/subscribe">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label class="muted">{{T "chat_id"}}</label>
+                  <input name="chat_id" required placeholder="123456789" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;" />
+                </div>
+                <div>
+                  <label class="muted">{{T "language"}}</label>
+                  <select name="language" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;">
+                    <option value="en">EN</option>
+                    <option value="de">DE</option>
+                    <option value="fr">FR</option>
+                    <option value="es">ES</option>
+                    <option value="it">IT</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="muted">{{T "refuge"}}</label>
+                  <select name="refuge" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;">
+                    <option value="*">Any</option>
+                    <option value="Tête Rousse">Tête Rousse</option>
+                    <option value="du Goûter">Refuge du Goûter</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="muted">{{T "date_from"}}</label>
+                  <input type="date" name="date_from" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;" />
+                </div>
+                <div>
+                  <label class="muted">{{T "date_to"}}</label>
+                  <input type="date" name="date_to" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e2e8f0;" />
+                </div>
+              </div>
+              <div style="margin-top:12px">
+                <button class="btn primary" type="submit">{{T "submit"}}</button>
+              </div>
+            </form>
+            <p class="muted" style="margin-top:8px">Or start a chat with the Telegram bot and send /start.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -288,4 +328,37 @@ func handleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
     // greet
     _ = telegram.SendMessageTo(chatID, "✅ Subscribed. We'll notify you about new dates. Send /stop to unsubscribe.")
     w.WriteHeader(http.StatusOK)
+}
+
+// handleSubscribe saves subscriber and a single query
+func handleSubscribe(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
+        return
+    }
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    chatID := r.FormValue("chat_id")
+    language := r.FormValue("language")
+    refuge := r.FormValue("refuge")
+    dateFrom := r.FormValue("date_from")
+    dateTo := r.FormValue("date_to")
+
+    if chatID == "" { http.Error(w, "chat_id required", http.StatusBadRequest); return }
+
+    bs, err := store.OpenBolt("data.db")
+    if err != nil { http.Error(w, "store open error", http.StatusInternalServerError); return }
+    defer bs.Close()
+
+    if err := bs.UpsertSubscriber(store.Subscriber{ChatID: chatID, Language: language, IsActive: true}); err != nil {
+        http.Error(w, "save subscriber error", http.StatusInternalServerError)
+        return
+    }
+    _, _ = bs.AddQuery(store.Query{ChatID: chatID, Refuge: refuge, DateFrom: dateFrom, DateTo: dateTo})
+
+    // optional: confirm in Telegram
+    _ = telegram.SendMessageTo(chatID, "✅ Subscription saved. We'll notify you when matching dates appear.")
+    http.Redirect(w, r, "/#subscribe", http.StatusSeeOther)
 }
